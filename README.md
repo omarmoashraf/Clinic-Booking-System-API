@@ -1,78 +1,81 @@
 # Clinic Booking API
 
-### Overview
+## Overview
 
-A REST API for booking clinic appointments. Patients browse doctors, view their available slots, and book or cancel appointments. Doctors manage their availability and appointment statuses. Admins manage doctor/patient accounts and specialties. Built with NestJS, TypeScript, and PostgreSQL as a portfolio backend project.
+A backend application for managing clinic appointment scheduling. Patients browse doctors, check availability, and book or cancel appointments. Doctors manage their availability and the status of their appointments. Admins manage accounts and specialties. Built with Node.js, Express.js, and PostgreSQL via Prisma.
 
 > Status: documentation phase — implementation has not started yet.
 
-### Features
+## Features
 
-- User registration and JWT login
+- Registration and JWT-based login, with hashed passwords
 - Role-based authorization (Patient / Doctor / Admin)
-- Doctor profiles with specialties
+- Doctor profiles and specialties
 - Doctor-managed availability slots
-- Appointment booking with double-booking prevention
-- Appointment status lifecycle (pending → confirmed → completed / cancelled)
-- Admin management of users and specialties
+- Appointment booking with double-booking prevented at the database level
+- Appointment status lifecycle (pending → confirmed → completed, or cancelled)
+- Admin management of users, doctors, and specialties
+- Centralized request validation and error handling
 - Swagger/OpenAPI documentation
 
-### Tech Stack
+## Tech Stack
 
-- NestJS
-- TypeScript
-- PostgreSQL
-- JWT (`@nestjs/jwt`, `passport-jwt`)
-- Docker (for local Postgres, added later)
-- Swagger (`@nestjs/swagger`)
-- `class-validator` / `class-transformer`
+```text
+Node.js
+Express.js
+JavaScript
+PostgreSQL
+Prisma
+JWT
+bcrypt / bcryptjs
+Zod or Joi
+Swagger (swagger-jsdoc / swagger-ui-express)
+Docker (local PostgreSQL)
+```
 
-### Architecture
+## Architecture
 
-The project follows NestJS's modular architecture: each domain area (auth, users, doctors, patients, specialties, availability, appointments) is its own module with a controller, service, and DTOs. Cross-cutting concerns — JWT auth and role checks — are implemented as guards applied at the route or controller level. See [`docs/DATABASE.md`](docs/DATABASE.md) for the data model behind these modules.
+A layered Express application: routes → controllers → services → repositories → Prisma → PostgreSQL, with centralized authentication, authorization, validation, and error-handling middleware. Full details, including the request lifecycle and the responsibility of each layer, are in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
-### Project Structure
+## Database
+
+PostgreSQL, accessed through Prisma. Six tables (`users`, `specialties`, `doctors`, `patients`, `availabilities`, `appointments`) with the appointment/availability relationship enforcing "no double booking" at the schema level. Full schema, constraints, and ERD are in [`docs/DATABASE.md`](docs/DATABASE.md).
+
+## API Documentation
+
+The full endpoint-by-endpoint specification — request/response shapes, validation rules, and the authorization matrix — is in [`docs/API.md`](docs/API.md). Once implemented, the same API will be browsable live via Swagger at `/api/docs`.
+
+## Project Structure
 
 ```text
 src/
-├── auth/
-│   ├── guards/
-│   ├── strategies/
-│   └── dto/
-├── users/
-├── doctors/
-├── patients/
-├── specialties/
-├── availability/
-├── appointments/
-├── admin/
-├── common/
-│   ├── decorators/
-│   └── filters/
-├── app.module.ts
-└── main.ts
+├── config/
+├── middlewares/
+├── routes/
+├── controllers/
+├── services/
+├── repositories/
+├── validators/
+├── errors/
+├── utils/
+├── lib/
+└── app.js
 ```
 
-### Database
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for what belongs in each folder.
 
-PostgreSQL, accessed via an ORM (TypeORM/Prisma — to be finalized during implementation). Full schema, relationships, constraints, and the ERD are documented in [`docs/DATABASE.md`](docs/DATABASE.md).
+## Getting Started
 
-### API Documentation
-
-The full endpoint-by-endpoint specification, including request/response shapes and role requirements, is in [`docs/API.md`](docs/API.md). Once implemented, the same API will be browsable live via Swagger at `/api/docs`.
-
-### Getting Started
-
-> The exact commands below will be finalized once the project is scaffolded. This section reflects the intended setup.
+> Commands below will be finalized once the project is scaffolded; this reflects the intended setup.
 
 1. Clone the repository
-2. Copy `.env.example` to `.env` and fill in the values (see Environment Variables below)
+2. Copy `.env.example` to `.env` and fill in the values (see Environment Variables)
 3. Install dependencies
-4. Start PostgreSQL (locally or via Docker, once added)
-5. Run database migrations
+4. Start PostgreSQL (via Docker or a local install)
+5. Run Prisma migrations
 6. Start the development server
 
-### Environment Variables
+## Environment Variables
 
 ```text
 DATABASE_URL=postgresql://user:password@localhost:5432/clinic_booking
@@ -81,31 +84,40 @@ JWT_EXPIRES_IN=1d
 PORT=3000
 ```
 
-### Running the Project
+## Running the Application
 
 ```bash
 # install dependencies
 npm install
 
 # run in development mode
-npm run start:dev
+npm run dev
 
-# build for production
-npm run build
-npm run start:prod
+# start in production mode
+npm start
 ```
 
-### Testing
+## Database Setup
 
-Unit tests for services (business rules such as double-booking prevention and ownership checks) and e2e tests for the main auth/booking flows are planned using NestJS's built-in Jest setup. No coverage numbers are claimed yet — this section will be updated once tests are written.
+Schema changes are managed with Prisma migrations:
 
-### Docker
+```bash
+npx prisma migrate dev --name init
+npx prisma generate
+```
 
-Docker Compose will be added to run a local PostgreSQL instance for development, so the app can be spun up without installing Postgres system-wide. This is not implemented yet.
+`npx prisma studio` can be used locally to inspect data during development.
 
-### Future Improvements
+## Testing
 
-- Pagination and sorting on list endpoints
-- Rate limiting on auth endpoints
+Unit tests will cover service-layer business rules (e.g. double-booking prevention, ownership checks, status transition rules). Integration/e2e tests will cover the main auth and booking flows end-to-end. No tests exist yet — this section will be updated as they're written.
+
+## Docker
+
+Docker Compose will run a local PostgreSQL instance so the database doesn't need to be installed system-wide. Not yet implemented.
+
+## Future Improvements
+
 - Refresh tokens
-- Automated CI pipeline (lint + test) on pull requests
+- Rate limiting on auth endpoints
+- Basic CI (lint + test) on pull requests

@@ -4,63 +4,78 @@ Base path for all routes: `/api/v1`
 
 ## Authentication
 
-The API uses stateless JWT authentication. On successful login, the client receives an access token that must be sent as `Authorization: Bearer <token>` on every protected request. The token payload contains the user's `id` and `role`; no sensitive data is embedded in it.
+JWT is sent as a bearer token on every protected request:
 
-## Authorization
+```text
+Authorization: Bearer <token>
+```
 
-Route access is controlled by a role guard on top of the auth guard. Summary by module:
+The authentication middleware verifies the token and attaches `{ id, role }` to `req.user`. Public endpoints (registration, login, browsing doctors/availability, viewing specialties) require no token.
 
-| Module | Public | Patient | Doctor | Admin |
+## Authorization Matrix
+
+| Endpoint | Public | Patient | Doctor | Admin |
 |---|---|---|---|---|
-| Auth | register, login | — | — | — |
-| Doctors (browse) | list/view doctors | — | — | — |
-| Availability (view) | view a doctor's open slots | — | — | — |
-| Availability (manage) | — | — | create/delete own slots | — |
-| Appointments | — | book/view/cancel own | view/manage own | view all (read-only) |
-| Users/Doctors/Patients (admin) | — | — | — | full CRUD |
-| Specialties (manage) | — | — | — | full CRUD |
-| Specialties (view) | list specialties | — | — | — |
+| Register | ✓ | | | |
+| Login | ✓ | | | |
+| View doctors / doctor detail | ✓ | ✓ | ✓ | ✓ |
+| View doctor availability | ✓ | ✓ | ✓ | ✓ |
+| View specialties | ✓ | ✓ | ✓ | ✓ |
+| Update own doctor profile | | | ✓ | |
+| Update own patient profile | | ✓ | | |
+| Create/delete own availability | | | ✓ | |
+| Book appointment | | ✓ | | |
+| View own appointments | | ✓ | ✓ | |
+| Cancel own appointment | | ✓ | ✓ | |
+| Update appointment status (confirm/complete) | | | ✓ | |
+| Manage specialties (create/update/delete) | | | | ✓ |
+| Manage users/doctors (admin) | | | | ✓ |
+| View all appointments | | | | ✓ |
 
-Ownership is enforced in addition to role checks — e.g. a patient can only cancel an appointment where `appointment.patient_id` matches their own patient record.
+## Error Response
 
-## Error Handling
-
-All errors follow a single consistent shape:
-
-```json
-{
-  "statusCode": 404,
-  "message": "Appointment not found",
-  "error": "Not Found"
-}
-```
-
-For validation errors, `message` is an array of field-level issues:
+Consistent shape across the API:
 
 ```json
 {
-  "statusCode": 400,
-  "message": ["email must be a valid email", "password must be at least 8 characters"],
-  "error": "Bad Request"
+  "status": "error",
+  "message": "Appointment slot is already booked"
 }
 ```
 
-No custom error hierarchy beyond NestJS's built-in `HttpException` subclasses (`BadRequestException`, `UnauthorizedException`, `ForbiddenException`, `NotFoundException`, `ConflictException`) is introduced.
+Validation errors include a `details` array:
 
-## DTOs
+```json
+{
+  "status": "error",
+  "message": "Validation failed",
+  "details": [
+    { "field": "email", "message": "must be a valid email" },
+    { "field": "password", "message": "must be at least 8 characters" }
+  ]
+}
+```
 
-Only the DTOs actually needed by the endpoints below:
+## Pagination and Filtering
 
-- `RegisterDto` — `email`, `password`, `fullName`, `phone?`, `role` ('PATIENT' | 'DOCTOR'), plus `specialtyId` (required if role is DOCTOR)
-- `LoginDto` — `email`, `password`
-- `UpdateDoctorProfileDto` — `bio?`, `specialtyId?`
-- `UpdatePatientProfileDto` — `fullName?`, `phone?`, `dateOfBirth?`
-- `CreateSpecialtyDto` — `name`
-- `UpdateSpecialtyDto` — `name?`
-- `CreateAvailabilityDto` — `date`, `startTime`, `endTime`
-- `CreateAppointmentDto` — `availabilityId`, `notes?`
-- `UpdateAppointmentStatusDto` — `status` ('CONFIRMED' | 'CANCELLED' | 'COMPLETED')
-- `AdminUpdateUserDto` — `fullName?`, `phone?`, `isActive?`
+List endpoints accept `page` and `limit` query params, plus endpoint-specific filters:
+
+```text
+GET /doctors?page=1&limit=10&specialty=cardiology
+GET /appointments/me?page=1&limit=10&status=CONFIRMED
+```
+
+Defaults: `page=1`, `limit=10`, `limit` capped at 50. Paginated responses are wrapped:
+
+```json
+{
+  "status": "success",
+  "data": [ ... ],
+  "meta": { "page": 1, "limit": 10, "total": 42 }
+}
+```
+
+Non-paginated responses use `{ "status": "success", "data": ... }` without `meta`.
 
 ---
 
@@ -69,6 +84,8 @@ Only the DTOs actually needed by the endpoints below:
 ### POST /auth/register
 
 Authentication: Public
+
+Validation (Zod, conceptually): `email` (valid email), `password` (min 8 chars), `fullName` (non-empty string), `phone` (optional string), `role` (enum: `PATIENT` | `DOCTOR`), `specialtyId` (required UUID if role is `DOCTOR`).
 
 Request:
 ```json
@@ -84,38 +101,36 @@ Request:
 Response `201`:
 ```json
 {
-  "id": "uuid",
-  "email": "patient@example.com",
-  "role": "PATIENT"
+  "status": "success",
+  "data": { "id": "uuid", "email": "patient@example.com", "role": "PATIENT" }
 }
 ```
 
-Errors: `409` if email already registered, `400` on validation failure.
+Errors: `409` email already registered, `400` validation failure.
 
 ### POST /auth/login
 
 Authentication: Public
 
+Validation: `email` (valid email), `password` (non-empty string).
+
 Request:
 ```json
-{
-  "email": "patient@example.com",
-  "password": "SecurePass123"
-}
+{ "email": "patient@example.com", "password": "SecurePass123" }
 ```
 
 Response `200`:
 ```json
 {
-  "accessToken": "jwt-token",
-  "user": {
-    "id": "uuid",
-    "role": "PATIENT"
+  "status": "success",
+  "data": {
+    "accessToken": "jwt-token",
+    "user": { "id": "uuid", "role": "PATIENT" }
   }
 }
 ```
 
-Errors: `401` on invalid credentials.
+Errors: `401` invalid credentials.
 
 ---
 
@@ -125,9 +140,9 @@ Errors: `401` on invalid credentials.
 
 Authentication: Required (any role)
 
-Purpose: Return the authenticated user's own account + role-specific profile.
+Purpose: Return the authenticated user merged with their doctor or patient profile.
 
-Response `200`: user record merged with doctor or patient profile as applicable.
+Response `200`: user + role-specific profile fields.
 
 ---
 
@@ -137,29 +152,23 @@ Response `200`: user record merged with doctor or patient profile as applicable.
 
 Authentication: Public
 
-Purpose: List doctors, optionally filtered by specialty.
+Query params: `page`, `limit`, `specialty` (specialty name or id, optional)
 
-Query params: `specialtyId?`
-
-Response `200`: array of doctor summaries (`id`, `fullName`, `specialty`, `bio`).
+Response `200`: paginated list of `{ id, fullName, specialty, bio }`.
 
 ### GET /doctors/:id
 
 Authentication: Public
 
-Purpose: View a single doctor's public profile.
-
-Errors: `404` if not found.
+Errors: `404` not found.
 
 ### PATCH /doctors/me
 
 Authentication: Required — Role: DOCTOR
 
-Purpose: Update the logged-in doctor's own profile.
+Validation: `bio` (optional string), `specialtyId` (optional UUID)
 
-Request: `UpdateDoctorProfileDto`
-
-Errors: `400` on validation failure.
+Errors: `400` validation failure.
 
 ---
 
@@ -169,11 +178,9 @@ Errors: `400` on validation failure.
 
 Authentication: Required — Role: PATIENT
 
-Purpose: Update the logged-in patient's own profile.
+Validation: `fullName` (optional string), `phone` (optional string), `dateOfBirth` (optional date)
 
-Request: `UpdatePatientProfileDto`
-
-Errors: `400` on validation failure.
+Errors: `400` validation failure.
 
 ---
 
@@ -189,21 +196,21 @@ Response `200`: array of `{ id, name }`.
 
 Authentication: Required — Role: ADMIN
 
-Request: `CreateSpecialtyDto`
+Validation: `name` (non-empty string)
 
-Errors: `409` if name already exists.
+Errors: `409` name already exists.
 
 ### PATCH /specialties/:id
 
 Authentication: Required — Role: ADMIN
 
-Request: `UpdateSpecialtyDto`
+Validation: `name` (optional string)
 
 ### DELETE /specialties/:id
 
 Authentication: Required — Role: ADMIN
 
-Errors: `409` if a doctor is still assigned to this specialty.
+Errors: `409` a doctor is still assigned to this specialty.
 
 ---
 
@@ -213,9 +220,9 @@ Errors: `409` if a doctor is still assigned to this specialty.
 
 Authentication: Public
 
-Purpose: List a doctor's `AVAILABLE` (open) slots.
+Purpose: List a doctor's `AVAILABLE` slots.
 
-Query params: `from?`, `to?` (date range)
+Query params: `from` (date, optional), `to` (date, optional)
 
 Response `200`: array of `{ id, date, startTime, endTime }`.
 
@@ -223,19 +230,15 @@ Response `200`: array of `{ id, date, startTime, endTime }`.
 
 Authentication: Required — Role: DOCTOR
 
-Purpose: Create a new availability slot for the logged-in doctor.
+Validation: `date` (date string), `startTime` (HH:mm), `endTime` (HH:mm, must be after `startTime`)
 
-Request: `CreateAvailabilityDto`
-
-Errors: `400` if `endTime <= startTime`, `409` if it overlaps an existing slot.
+Errors: `400` invalid time range, `409` overlaps an existing slot.
 
 ### DELETE /doctors/me/availability/:id
 
 Authentication: Required — Role: DOCTOR
 
-Purpose: Remove one of the logged-in doctor's own slots.
-
-Errors: `403` if the slot doesn't belong to the requester, `409` if the slot is already `BOOKED`.
+Errors: `403` slot doesn't belong to the requester, `409` slot is already booked.
 
 ---
 
@@ -245,19 +248,16 @@ Errors: `403` if the slot doesn't belong to the requester, `409` if the slot is 
 
 Authentication: Required — Role: PATIENT
 
-Purpose: Book an available slot.
+Validation: `availabilityId` (UUID), `notes` (optional string)
 
 Request:
 ```json
-{
-  "availabilityId": "uuid",
-  "notes": "First visit"
-}
+{ "availabilityId": "uuid", "notes": "First visit" }
 ```
 
-Response `201`: the created appointment, status `PENDING`.
+Response `201`: created appointment, status `PENDING`.
 
-Errors: `404` if the slot doesn't exist, `409` if it's no longer `AVAILABLE`.
+Errors: `404` slot not found, `409` slot no longer `AVAILABLE`.
 
 ### GET /appointments/me
 
@@ -265,23 +265,21 @@ Authentication: Required — Role: PATIENT or DOCTOR
 
 Purpose: List the caller's own appointments (as patient or as doctor, depending on role).
 
-Query params: `status?`
+Query params: `page`, `limit`, `status` (optional)
 
 ### GET /appointments/:id
 
 Authentication: Required — Role: PATIENT, DOCTOR, or ADMIN
 
-Errors: `403` if the appointment doesn't belong to the requester (unless ADMIN), `404` if not found.
+Errors: `403` doesn't belong to requester (unless ADMIN), `404` not found.
 
 ### PATCH /appointments/:id/status
 
-Authentication: Required — Role: DOCTOR (own appointments) or PATIENT (own appointments, cancel only)
+Authentication: Required — Role: DOCTOR (own appointments, any valid transition) or PATIENT (own appointments, cancel only)
 
-Purpose: Update appointment status. A patient may only transition their own appointment to `CANCELLED`. A doctor may transition their own appointments to `CONFIRMED`, `CANCELLED`, or `COMPLETED`.
+Validation: `status` (enum: `CONFIRMED` | `CANCELLED` | `COMPLETED`)
 
-Request: `UpdateAppointmentStatusDto`
-
-Errors: `403` on ownership or invalid role/status combination, `409` on an invalid state transition (e.g. cancelling a `COMPLETED` appointment).
+Errors: `403` ownership/role mismatch, `409` invalid state transition (e.g. cancelling a `COMPLETED` appointment, or modifying a past appointment other than marking it `COMPLETED`).
 
 ---
 
@@ -291,26 +289,24 @@ Errors: `403` on ownership or invalid role/status combination, `409` on an inval
 
 Authentication: Required — Role: ADMIN
 
-Query params: `role?`, `isActive?`
+Query params: `page`, `limit`, `role` (optional), `isActive` (optional)
 
 ### PATCH /admin/users/:id
 
 Authentication: Required — Role: ADMIN
 
-Request: `AdminUpdateUserDto`
-
-Purpose: Update contact info or activate/deactivate an account.
+Validation: `fullName` (optional string), `phone` (optional string), `isActive` (optional boolean)
 
 ### GET /admin/appointments
 
 Authentication: Required — Role: ADMIN
 
-Purpose: Read-only oversight view of all appointments, with filters.
+Purpose: Read-only oversight of all appointments.
 
-Query params: `status?`, `doctorId?`, `patientId?`
+Query params: `page`, `limit`, `status`, `doctorId`, `patientId` (all optional)
 
 ---
 
 ## Swagger
 
-The NestJS application will expose live Swagger/OpenAPI documentation at `/api/docs`, generated directly from controller decorators and DTOs, once the modules above are implemented. This file describes the intended contract ahead of that implementation.
+The implemented Express API will expose Swagger/OpenAPI documentation at `/api/docs`, generated from JSDoc annotations (or an equivalent `swagger-jsdoc` setup) on the route definitions above. This document describes the intended contract ahead of that implementation.
