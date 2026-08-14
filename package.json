@@ -1,0 +1,35 @@
+{
+  "name": "clinic-booking-system",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "A backend application for managing clinic appointment scheduling. Patients browse doctors, check availability, and book or cancel appointments. Doctors manage their availability and the status of their appointments. Admins manage accounts and specialties. Built with Node.js, Express.js, and PostgreSQL via Prisma.",
+  "main": "app.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "dev": "nodemon src/app.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/omarmoashraf/Clinic-Booking-System-API.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/omarmoashraf/Clinic-Booking-System-API/issues"
+  },
+  "homepage": "https://github.com/omarmoashraf/Clinic-Booking-System-API#readme",
+  "dependencies": {
+    "@prisma/client": "^7.9.1",
+    "express": "^5.2.1",
+    "nodemon": "^3.1.14"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "dotenv": "^17.4.2",
+    "prisma": "^7.9.1"
+  }
+}

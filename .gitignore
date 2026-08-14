@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Generated Prisma Client
+src/generated/
+
+# Local AI tooling
+.agents/
+.claude/
+.windsurf/
+skills-lock.json
+
+# Logs
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
