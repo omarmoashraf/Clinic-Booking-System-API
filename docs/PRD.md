@@ -21,7 +21,7 @@ It replaces manual, ad-hoc scheduling (phone calls, paper calendars) with a stru
 |---|---|
 | **Patient** | Registers and logs in; browses doctors and their availability; books an available slot; views their own appointments; cancels their own appointments. |
 | **Doctor** | Logs in; manages their own profile; defines and removes their own availability slots; views appointments booked against them; updates the status of their own appointments (confirm, complete, cancel). |
-| **Admin** | Logs in; manages user and doctor accounts (create, update, deactivate); manages the specialty list; has read access to appointments for administrative oversight. Admin accounts are not created through public registration. |
+| **Admin** | Logs in; lists, updates, and deactivates user and doctor accounts; manages the specialty list; has read access to appointments for administrative oversight. Admin accounts are never created through public registration. |
 
 ## Core Features
 
@@ -85,7 +85,7 @@ Login
 
 ## Functional Requirements
 
-1. Users register with an email, password, name, and role (patient or doctor); admin accounts are created directly by an existing admin.
+1. Users register with an email, password, name, and role (patient or doctor). Admin accounts are never created through public registration or an API endpoint.
 2. Passwords are hashed before storage; plain-text passwords are never persisted or logged.
 3. Login verifies credentials and returns a signed JWT containing the user's id and role.
 4. Every protected route requires a valid JWT, verified by authentication middleware.
@@ -116,8 +116,8 @@ Login
 ## Business Rules
 
 - A patient cannot book a slot that is not currently `AVAILABLE`.
-- A doctor cannot have two appointments at the same time — guaranteed because each appointment consumes exactly one availability slot, and a slot can back at most one active appointment.
-- A patient cannot book the same slot twice (enforced by the one-to-one relationship between a slot and its appointment).
+- A doctor cannot have overlapping availability slots. A slot may end exactly when the next begins; otherwise two slots on the same date overlap when `newStart < existingEnd` and `newEnd > existingStart`.
+- A slot can have only one non-cancelled appointment at a time. Cancelled appointments remain as history and a later appointment may reuse the released slot.
 - A patient can only cancel their own appointments.
 - A doctor can only manage their own availability and only act on appointments tied to their own slots.
 - Users cannot access resources belonging to other users; this is enforced by ownership checks in the service layer, not just role checks.
@@ -125,6 +125,32 @@ Login
 - Appointment status transitions are controlled: `PENDING → CONFIRMED → COMPLETED`, with `CANCELLED` reachable from `PENDING` or `CONFIRMED` only. A `COMPLETED` or already-`CANCELLED` appointment cannot transition further.
 - Cancelling an appointment (from `PENDING` or `CONFIRMED`) sets its status to `CANCELLED` and returns the underlying slot to `AVAILABLE`.
 - Past appointments (slot date/time already elapsed) cannot be modified or cancelled, except that a doctor may still mark a past `CONFIRMED` appointment as `COMPLETED`.
+
+## Operational Decisions
+
+### First admin bootstrap and account scope
+
+The first admin is created only through a local, development-only bootstrap command/script, to be introduced with authentication setup. It creates a single `ADMIN` user from local environment values and is never exposed as an HTTP endpoint or committed with credentials.
+
+Normal administration is deliberately small: admins can list, update, and deactivate patient and doctor accounts, and manage specialties. Creating additional `ADMIN` accounts is also a local maintenance/bootstrap operation, not an API feature. This keeps the learning project focused on role checks and account lifecycle rather than an admin-provisioning system.
+
+### Deactivation
+
+An inactive user cannot log in. If an account is deactivated after a token was issued, authentication rejects subsequent protected requests after checking that the account is still active. Inactive patients cannot book or cancel appointments; inactive doctors cannot manage profiles, availability, or appointment status; inactive admins cannot perform admin operations. Existing records remain for history.
+
+### Scheduling time and availability overlap
+
+All clinic dates and times are interpreted in the single clinic timezone `Africa/Cairo`. The project stores a slot as a local date plus local start/end times; multi-timezone conversion is out of scope.
+
+Doctors create individual slots. Adjacent slots are valid, but overlapping slots for the same doctor and date are rejected with `409 Conflict`. The first implementation uses a service-level overlap query; PostgreSQL range/exclusion constraints are intentionally out of scope for this learning project.
+
+### Availability time invariant
+
+`end_time` must be strictly later than `start_time`. This is enforced three ways when availability is implemented: request validation, service-level validation, and a PostgreSQL `CHECK` constraint added in the availability migration. It is not part of the current foundation migration.
+
+### Appointment cancellation and rebooking
+
+Cancelled appointments are retained as history and release their slot. The final appointment design therefore permits an availability row to have many historical appointments, but only one non-cancelled appointment. In the appointment milestone, the current `availability_id` unique constraint will be replaced by a PostgreSQL partial unique index for non-`CANCELLED` appointments, while the booking/cancellation transaction updates the slot status atomically. This preserves history, permits rebooking after cancellation, and keeps the active-booking guarantee in the database.
 
 ## Out of Scope
 

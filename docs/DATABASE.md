@@ -2,13 +2,15 @@
 
 ## Database Overview
 
-The schema is a normalized relational model with six tables. `users` holds shared account data (email, password hash, role) for patients, doctors, and admins alike. `doctors` and `patients` extend `users` with role-specific profile fields through a one-to-one relationship. `specialties` is a small, admin-managed lookup table. `availabilities` represents individual bookable time slots owned by a doctor, and `appointments` links a patient to exactly one availability slot.
+The schema is a normalized relational model with six PostgreSQL tables: `"User"`, `"Specialty"`, `"Doctor"`, `"Patient"`, `"Availability"`, and `"Appointment"`. Prisma's existing PascalCase model names map directly to these quoted table names; this convention is retained to avoid unnecessary migration work. `"User"` holds shared account data (email, password hash, role) for patients, doctors, and admins alike. `"Doctor"` and `"Patient"` extend `"User"` with role-specific profile fields through a one-to-one relationship. `"Specialty"` is a small, admin-managed lookup table. `"Availability"` represents individual bookable time slots owned by a doctor, and `"Appointment"` records a patient's use of a slot.
 
-The relationship between `availabilities` and `appointments` is the core of the design: an appointment cannot exist without consuming a specific slot, and a slot can back at most one active appointment. That relationship is what prevents double booking at the schema level, rather than relying purely on application logic.
+The relationship between `"Availability"` and `"Appointment"` is the core of the design. An appointment cannot exist without consuming a specific slot. A slot may have several historical appointments after cancellations, but PostgreSQL permits only one non-`CANCELLED` appointment for it at a time. That partial unique index is the database-level double-booking safeguard.
+
+> Implementation status: the foundation migration currently has a simple unique constraint on `"Appointment"."availability_id"`. It will be replaced in the appointment milestone by the partial unique index described here, so cancellation can release a slot while appointment history remains intact. The availability `end_time > start_time` check is likewise added in the availability milestone.
 
 ## Tables
 
-### users
+### "User"
 
 | Column | Type | Nullable | Default | PK | FK | Unique | Description |
 |---|---|---|---|---|---|---|---|
@@ -22,7 +24,7 @@ The relationship between `availabilities` and `appointments` is the core of the 
 | created_at | TIMESTAMPTZ | No | now() | No | — | — | Record creation time |
 | updated_at | TIMESTAMPTZ | No | now() | No | — | — | Record update time |
 
-### specialties
+### "Specialty"
 
 | Column | Type | Nullable | Default | PK | FK | Unique | Description |
 |---|---|---|---|---|---|---|---|
@@ -30,7 +32,7 @@ The relationship between `availabilities` and `appointments` is the core of the 
 | name | VARCHAR(100) | No | — | No | — | Yes | Specialty name (e.g. "Cardiology") |
 | created_at | TIMESTAMPTZ | No | now() | No | — | — | Record creation time |
 
-### doctors
+### "Doctor"
 
 | Column | Type | Nullable | Default | PK | FK | Unique | Description |
 |---|---|---|---|---|---|---|---|
@@ -41,7 +43,7 @@ The relationship between `availabilities` and `appointments` is the core of the 
 | created_at | TIMESTAMPTZ | No | now() | No | — | — | Record creation time |
 | updated_at | TIMESTAMPTZ | No | now() | No | — | — | Record update time |
 
-### patients
+### "Patient"
 
 | Column | Type | Nullable | Default | PK | FK | Unique | Description |
 |---|---|---|---|---|---|---|---|
@@ -51,7 +53,7 @@ The relationship between `availabilities` and `appointments` is the core of the 
 | created_at | TIMESTAMPTZ | No | now() | No | — | — | Record creation time |
 | updated_at | TIMESTAMPTZ | No | now() | No | — | — | Record update time |
 
-### availabilities
+### "Availability"
 
 | Column | Type | Nullable | Default | PK | FK | Unique | Description |
 |---|---|---|---|---|---|---|---|
@@ -64,12 +66,12 @@ The relationship between `availabilities` and `appointments` is the core of the 
 | created_at | TIMESTAMPTZ | No | now() | No | — | — | Record creation time |
 | updated_at | TIMESTAMPTZ | No | now() | No | — | — | Record update time |
 
-### appointments
+### "Appointment"
 
 | Column | Type | Nullable | Default | PK | FK | Unique | Description |
 |---|---|---|---|---|---|---|---|
 | id | UUID | No | gen_random_uuid() | Yes | — | — | Primary key |
-| availability_id | UUID | No | — | No | availabilities.id | Yes | The slot this appointment consumes |
+| availability_id | UUID | No | — | No | Availability.id | Partial unique when status is not CANCELLED | The slot this appointment consumes |
 | doctor_id | UUID | No | — | No | doctors.id | — | Denormalized for simpler querying |
 | patient_id | UUID | No | — | No | patients.id | — | Booking patient |
 | status | appointment_status (enum) | No | 'PENDING' | No | — | — | Appointment lifecycle status |
@@ -86,34 +88,35 @@ Specialty (1) → (many) Doctor
 Doctor (1) → (many) Availability
 Doctor (1) → (many) Appointment      [denormalized reference]
 Patient (1) → (many) Appointment
-Availability (1) → (0..1) Appointment
+Availability (1) → (many) Appointment (history; at most one non-cancelled)
 ```
 
 - A `User` has at most one `Doctor` profile and at most one `Patient` profile — in practice exactly one of the two, except admins, who have neither.
 - A `Doctor` belongs to exactly one `Specialty`.
 - A `Doctor` owns many `Availability` slots and, through those, many `Appointment` records.
 - A `Patient` can hold many `Appointment` records.
-- Each `Availability` slot backs at most one `Appointment`.
+- Each `Availability` slot can have many historical `Appointment` records, but only one with a status other than `CANCELLED`.
 
 ## Constraints
 
-- `users.email` — UNIQUE, NOT NULL
-- `doctors.user_id` — UNIQUE, NOT NULL, FK → `users.id`
-- `patients.user_id` — UNIQUE, NOT NULL, FK → `users.id`
-- `doctors.specialty_id` — NOT NULL, FK → `specialties.id`
-- `specialties.name` — UNIQUE, NOT NULL
-- `availabilities.doctor_id` — NOT NULL, FK → `doctors.id`
-- CHECK on `availabilities`: `end_time > start_time`
-- `appointments.availability_id` — UNIQUE, NOT NULL, FK → `availabilities.id` — this uniqueness constraint is the actual double-booking safeguard
-- `appointments.doctor_id` — NOT NULL, FK → `doctors.id`
-- `appointments.patient_id` — NOT NULL, FK → `patients.id`
+- `"User".email` — UNIQUE, NOT NULL
+- `"Doctor".user_id` — UNIQUE, NOT NULL, FK → `"User".id`
+- `"Patient".user_id` — UNIQUE, NOT NULL, FK → `"User".id`
+- `"Doctor".specialty_id` — NOT NULL, FK → `"Specialty".id`
+- `"Specialty".name` — UNIQUE, NOT NULL
+- `"Availability".doctor_id` — NOT NULL, FK → `"Doctor".id`
+- `"Availability"` — `CHECK (end_time > start_time)`, added with availability work; request and service validation enforce the same rule.
+- `"Appointment".availability_id` — NOT NULL FK → `"Availability".id`; a PostgreSQL partial unique index permits only one row per availability where `status <> 'CANCELLED'`.
+- `"Appointment".doctor_id` — NOT NULL, FK → `"Doctor".id`
+- `"Appointment".patient_id` — NOT NULL, FK → `"Patient".id`
 
 ## Indexes
 
-- `users(email)` — backs login lookups (also enforced by the UNIQUE constraint).
-- `availabilities(doctor_id, date)` — supports the frequent "get a doctor's slots for a date range" query.
-- `appointments(patient_id)` — supports "get my appointments" for patients.
-- `appointments(doctor_id)` — supports "get my appointments" for doctors.
+- `"User"(email)` — backs login lookups (also enforced by the UNIQUE constraint).
+- `"Availability"(doctor_id, date)` — supports the frequent "get a doctor's slots for a date range" query.
+- `"Appointment"(patient_id)` — supports "get my appointments" for patients.
+- `"Appointment"(doctor_id)` — supports "get my appointments" for doctors.
+- Partial unique `"Appointment"(availability_id) WHERE status <> 'CANCELLED'` — prevents two active appointments for one slot while preserving cancelled history.
 
 No further indexes are added; these directly match the query patterns the API actually needs.
 
@@ -135,7 +138,7 @@ erDiagram
     DOCTOR ||--o{ AVAILABILITY : owns
     DOCTOR ||--o{ APPOINTMENT : "is booked for"
     PATIENT ||--o{ APPOINTMENT : books
-    AVAILABILITY ||--o| APPOINTMENT : "consumed by"
+    AVAILABILITY ||--o{ APPOINTMENT : "historically consumed by"
 
     USER {
         uuid id PK
@@ -181,17 +184,17 @@ erDiagram
 
 ## Prisma Considerations
 
-Each table above maps directly to a Prisma model, with the enums defined as Prisma `enum` blocks (`Role`, `AvailabilityStatus`, `AppointmentStatus`). `doctors.user_id` and `patients.user_id` become `@unique` foreign keys with a `@relation` back to `User`, giving the one-to-one relationship. `appointments.availability_id` is `@unique`, which is what makes Prisma (and Postgres) reject a second appointment against the same slot.
+Each table above maps directly to a Prisma model, with the enums defined as Prisma `enum` blocks (`Role`, `AvailabilityStatus`, `AppointmentStatus`). `Doctor.user_id` and `Patient.user_id` become `@unique` foreign keys with a `@relation` back to `User`, giving the one-to-one relationship. In the appointment milestone, `Appointment.availability_id` becomes a non-unique relation (one availability to many appointment records) and a PostgreSQL migration adds the partial unique index described above. Prisma does not express this partial index directly, so it is intentionally maintained in that migration.
 
-The booking operation — checking a slot is `AVAILABLE`, creating the appointment, and flipping the slot to `BOOKED` — is the one place a Prisma `$transaction` is actually needed, since it touches two tables and must be atomic. Cancellation (updating appointment status and releasing the slot) uses the same pattern. Everything else in the API is simple enough not to need explicit transactions.
+The booking operation — atomically claiming an `AVAILABLE` slot, creating the appointment, and flipping the slot to `BOOKED` — needs a Prisma `$transaction`. The partial unique index remains the database backstop if requests race. Cancellation (setting the appointment to `CANCELLED` and releasing the slot) uses the same pattern. Everything else in the API is simple enough not to need explicit transactions.
 
-A full `schema.prisma` is not included here since it would just restate the tables above in Prisma's syntax; it will be written directly during implementation from this document.
+The repository already contains `prisma/schema.prisma` and the foundation migration. It will be updated by later, focused migrations as availability and appointment work is implemented.
 
 ## Important Database Decisions
 
-- **User/Doctor/Patient modeling:** A single `users` table carries shared auth/account fields for every role, with `doctors` and `patients` as thin one-to-one extension tables. This avoids duplicating auth logic per role while keeping role-specific fields out of a bloated `users` table.
-- **Appointment modeling:** An appointment always references a specific `availability` row rather than storing a free-form date/time. This turns "one slot, one appointment" into a database guarantee (the UNIQUE constraint on `availability_id`) instead of a rule the application has to re-check on every write.
+- **User/Doctor/Patient modeling:** A single `"User"` table carries shared auth/account fields for every role, with `"Doctor"` and `"Patient"` as thin one-to-one extension tables. This avoids duplicating auth logic per role while keeping role-specific fields out of a bloated `"User"` table.
+- **Appointment modeling:** An appointment always references a specific `"Availability"` row rather than storing a free-form date/time. A partial unique index on non-cancelled appointments guarantees that no slot has two active appointments, while cancelled appointment history remains queryable and the slot can be reused.
 - **Availability modeling:** Slots are created individually by the doctor (a specific date + start/end time) rather than generated from a recurring pattern. This keeps availability management simple and avoids building a recurrence engine, which is out of scope.
 - **Appointment status:** A four-state enum (`PENDING → CONFIRMED → COMPLETED`, with `CANCELLED` reachable from the first two) is enough to demonstrate a real, controlled status lifecycle without inventing states the application has no use for.
-- **Preventing double booking:** Enforced at two levels — the UNIQUE constraint on `appointments.availability_id` at the database layer, and the `AVAILABLE` → `BOOKED` status check performed inside the booking transaction before the insert.
+- **Preventing double booking:** Enforced at two levels — the partial unique index on active appointments at the database layer, and the `AVAILABLE` → `BOOKED` status change performed inside the booking transaction before the insert.
 - **Foreign key relationships:** All foreign keys use `ON DELETE RESTRICT` by default (no cascading deletes), since account or slot deletion should be a deliberate, explicit operation (e.g. deactivation) rather than something that silently removes historical appointment data.

@@ -59,7 +59,7 @@ A small set of custom error classes (e.g. `AppError`, `NotFoundError`, `Validati
 
 ### Configuration
 
-Environment variables are loaded once (via `dotenv`) and read through a single `config` module that validates required variables are present at startup and exposes them as a typed-feeling object (e.g. `config.jwt.secret`, `config.db.url`). No other part of the app reads `process.env` directly.
+Environment variables are loaded once (via `dotenv`) and read through a single `config` module that validates and parses required variables at startup before exposing them as a typed-feeling object (e.g. `config.jwt.secret`, `config.db.url`). Application modules, including the Prisma client setup, consume this config object rather than reading `process.env` directly. The Prisma CLI separately reads `DATABASE_URL` through `prisma.config.ts` because it runs outside the application process.
 
 ### Lib
 
@@ -107,7 +107,7 @@ Login request
 
 Subsequent requests
 → Client sends "Authorization: Bearer <token>"
-→ Authentication middleware verifies the token
+→ Authentication middleware verifies the token and confirms the user is still active
 → Decoded { id, role } attached to req.user
 → Request proceeds to authorization/validation/controller
 ```
@@ -124,6 +124,8 @@ requireRole('DOCTOR')
 applied per-route after the authentication middleware. It reads `req.user.role` (set by authentication) and rejects with a 403 if it doesn't match. Where a rule is about *ownership* rather than role (e.g. "a patient can only cancel their own appointment"), that check lives in the service layer, since it depends on data the middleware doesn't have — the role middleware only ever answers "is this user allowed to call this kind of endpoint at all."
 
 Roles: `PATIENT`, `DOCTOR`, `ADMIN`.
+
+Admin accounts have no HTTP creation endpoint. A local-only bootstrap/maintenance process creates them, keeping privileged account provisioning outside the public API.
 
 ## Error Handling Architecture
 

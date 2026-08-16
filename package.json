@@ -9,7 +9,8 @@
   },
   "scripts": {
     "dev": "nodemon src/app.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node src/app.js",
+    "test:db": "node src/test-db.js"
   },
   "repository": {
     "type": "git",
@@ -23,13 +24,16 @@
   },
   "homepage": "https://github.com/omarmoashraf/Clinic-Booking-System-API#readme",
   "dependencies": {
+    "@prisma/adapter-pg": "^7.9.1",
     "@prisma/client": "^7.9.1",
     "express": "^5.2.1",
-    "nodemon": "^3.1.14"
+    "dotenv": "^17.4.2",
+    "nodemon": "^3.1.14",
+    "pg": "^8.23.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
-    "dotenv": "^17.4.2",
     "prisma": "^7.9.1"
   }
 }

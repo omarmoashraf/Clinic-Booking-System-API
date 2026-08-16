@@ -12,6 +12,8 @@ Authorization: Bearer <token>
 
 The authentication middleware verifies the token and attaches `{ id, role }` to `req.user`. Public endpoints (registration, login, browsing doctors/availability, viewing specialties) require no token.
 
+An inactive account cannot log in or use a previously issued token. Authentication verifies that the account remains active on every protected request.
+
 ## Authorization Matrix
 
 | Endpoint | Public | Patient | Doctor | Admin |
@@ -108,6 +110,8 @@ Response `201`:
 
 Errors: `409` email already registered, `400` validation failure.
 
+`ADMIN` is not an accepted public-registration role. The first admin and any later admin accounts are created only through the documented local bootstrap/maintenance process, not through this API.
+
 ### POST /auth/login
 
 Authentication: Public
@@ -131,6 +135,8 @@ Response `200`:
 ```
 
 Errors: `401` invalid credentials.
+
+Inactive accounts receive the same `401` response as invalid credentials.
 
 ---
 
@@ -234,6 +240,8 @@ Validation: `date` (date string), `startTime` (HH:mm), `endTime` (HH:mm, must be
 
 Errors: `400` invalid time range, `409` overlaps an existing slot.
 
+Scheduling uses the clinic timezone `Africa/Cairo`. Slots are individual local date/time intervals; adjacent slots are allowed. For the same doctor and date, an attempted slot overlaps when `newStart < existingEnd` and `newEnd > existingStart`; the service rejects it with `409`.
+
 ### DELETE /doctors/me/availability/:id
 
 Authentication: Required — Role: DOCTOR
@@ -258,6 +266,8 @@ Request:
 Response `201`: created appointment, status `PENDING`.
 
 Errors: `404` slot not found, `409` slot no longer `AVAILABLE`.
+
+An availability slot can have one non-cancelled appointment. Cancelling an appointment retains it as history, changes its status to `CANCELLED`, and releases the slot so that it may be booked again.
 
 ### GET /appointments/me
 
@@ -296,6 +306,8 @@ Query params: `page`, `limit`, `role` (optional), `isActive` (optional)
 Authentication: Required — Role: ADMIN
 
 Validation: `fullName` (optional string), `phone` (optional string), `isActive` (optional boolean)
+
+This endpoint manages existing patient and doctor accounts only. There is no admin-account creation API; inactive users cannot log in or make protected requests.
 
 ### GET /admin/appointments
 

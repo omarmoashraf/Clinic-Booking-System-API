@@ -4,9 +4,9 @@
 
 A backend application for managing clinic appointment scheduling. Patients browse doctors, check availability, and book or cancel appointments. Doctors manage their availability and the status of their appointments. Admins manage accounts and specialties. Built with Node.js, Express.js, and PostgreSQL via Prisma.
 
-> Status: documentation phase — implementation has not started yet.
+> Status: Milestone 1 foundation complete. The application has validated configuration, a Prisma/PostgreSQL connection, and a health endpoint. Domain features are planned but not implemented yet.
 
-## Features
+## Planned Features
 
 - Registration and JWT-based login, with hashed passwords
 - Role-based authorization (Patient / Doctor / Admin)
@@ -26,12 +26,10 @@ Express.js
 JavaScript
 PostgreSQL
 Prisma
-JWT
-bcrypt / bcryptjs
-Zod or Joi
-Swagger (swagger-jsdoc / swagger-ui-express)
-Docker (local PostgreSQL)
+Zod
 ```
+
+JWT, password hashing, Swagger, and Docker are planned additions, not current dependencies or features.
 
 ## Architecture
 
@@ -39,7 +37,7 @@ A layered Express application: routes → controllers → services → repositor
 
 ## Database
 
-PostgreSQL, accessed through Prisma. Six tables (`users`, `specialties`, `doctors`, `patients`, `availabilities`, `appointments`) with the appointment/availability relationship enforcing "no double booking" at the schema level. Full schema, constraints, and ERD are in [`docs/DATABASE.md`](docs/DATABASE.md).
+PostgreSQL, accessed through Prisma. The initial schema and migration use Prisma's quoted PascalCase table names (`"User"`, `"Specialty"`, `"Doctor"`, `"Patient"`, `"Availability"`, and `"Appointment"`). The final appointment design will retain cancelled history and enforce one non-cancelled appointment per slot at the database level. Full schema decisions are in [`docs/DATABASE.md`](docs/DATABASE.md).
 
 ## API Documentation
 
@@ -66,12 +64,10 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for what belongs in each fold
 
 ## Getting Started
 
-> Commands below will be finalized once the project is scaffolded; this reflects the intended setup.
-
 1. Clone the repository
 2. Copy `.env.example` to `.env` and fill in the values (see Environment Variables)
 3. Install dependencies
-4. Start PostgreSQL (via Docker or a local install)
+4. Start PostgreSQL locally
 5. Run Prisma migrations
 6. Start the development server
 
@@ -79,10 +75,10 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for what belongs in each fold
 
 ```text
 DATABASE_URL=postgresql://user:password@localhost:5432/clinic_booking
-JWT_SECRET=change-me
-JWT_EXPIRES_IN=1d
 PORT=3000
 ```
+
+JWT environment variables will be documented when authentication is implemented.
 
 ## Running the Application
 
@@ -95,6 +91,9 @@ npm run dev
 
 # start in production mode
 npm start
+
+# verify Prisma can connect to the configured database
+npm run test:db
 ```
 
 ## Database Setup
@@ -108,13 +107,13 @@ npx prisma generate
 
 `npx prisma studio` can be used locally to inspect data during development.
 
-## Testing
+## Verification and Testing
 
-Unit tests will cover service-layer business rules (e.g. double-booking prevention, ownership checks, status transition rules). Integration/e2e tests will cover the main auth and booking flows end-to-end. No tests exist yet — this section will be updated as they're written.
+`npm run test:db` is a database connectivity smoke check, not an automated test suite. Automated service and integration tests will be added once business features exist.
 
 ## Docker
 
-Docker Compose will run a local PostgreSQL instance so the database doesn't need to be installed system-wide. Not yet implemented.
+Docker Compose is not implemented. Use a locally running PostgreSQL instance for now.
 
 ## Future Improvements
 
