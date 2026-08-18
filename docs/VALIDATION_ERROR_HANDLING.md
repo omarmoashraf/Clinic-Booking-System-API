@@ -138,7 +138,7 @@ Catches all errors and formats them consistently.
 
 ```json
 {
-  "status": "error|validation_error|not_found|unauthorized|forbidden|conflict",
+  "status": "error|validation_error|not_found|unauthorized|forbidden|conflict|unprocessable_entity|internal_error",
   "message": "Human-readable error message",
   "errors": [] // Only for validation errors
 }

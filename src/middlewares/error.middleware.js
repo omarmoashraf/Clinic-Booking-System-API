@@ -1,75 +1,69 @@
-import { AppError } from '../errors/AppError.js';
+import { ZodError } from 'zod';
+import config from '../config/index.js';
+import { AppError, ValidationError } from '../errors/AppError.js';
+
+const INTERNAL_SERVER_ERROR_MESSAGE = 'Internal server error';
 
 /**
  * Centralized error handling middleware
  *
  * Catches all errors thrown in the request pipeline and formats them
- * into consistent HTTP responses.
+ * into consistent HTTP responses. Registered last, after all routes.
  *
- * Error handling priority:
- * 1. Custom AppError instances (have statusCode and status)
- * 2. Generic Error objects (default to 500)
- * 3. Unknown errors (wrapped as internal server error)
+ * Error handling priority (see docs/VALIDATION_ERROR_HANDLING.md):
+ * 1. AppError instances — use their statusCode and status
+ * 2. ZodError — converted to a ValidationError (400)
+ * 3. Generic Error objects — honor err.statusCode if set, else 500;
+ *    the real message is only exposed in development
  *
  * Response format:
  * {
- *   status: string,        // 'success', 'error', 'validation_error', 'not_found', etc.
- *   message: string,       // User-facing error message
- *   ...(validation errors)  // Additional fields for specific error types
+ *   status: string,   // 'error', 'validation_error', 'not_found', etc.
+ *   message: string,  // User-facing error message
+ *   errors: [...]     // Only for validation errors
  * }
  */
 const errorHandler = (err, req, res, next) => {
   let statusCode = 500;
   let status = 'error';
-  let message = 'An unexpected error occurred';
-  let responseBody = {};
+  let message = INTERNAL_SERVER_ERROR_MESSAGE;
+  let extraFields = {};
 
-  // Handle custom AppError instances (AppError, ValidationError, NotFoundError, etc.)
   if (err instanceof AppError) {
     statusCode = err.statusCode;
     status = err.status;
     message = err.message;
 
-    // Include validation errors if present
     if (err.errors) {
-      responseBody.errors = err.errors;
+      extraFields.errors = err.errors;
+    }
+  } else if (err instanceof ZodError) {
+    const validationError = ValidationError.fromZodError(err);
+    statusCode = validationError.statusCode;
+    status = validationError.status;
+    message = validationError.message;
+    extraFields.errors = validationError.errors;
+  } else {
+    statusCode = err.statusCode ?? 500;
+
+    if (config.env.isDev || statusCode < 500) {
+      message = err.message;
     }
   }
-  // Handle generic Error objects
-  else if (err instanceof Error) {
-    statusCode = 500;
-    status = 'error';
-    // Only expose error message in development; hide in production
-    message =
-      process.env.NODE_ENV === 'development'
-        ? err.message
-        : 'Internal server error';
-  }
-  // Handle unknown errors
-  else {
-    statusCode = 500;
-    status = 'error';
-    message = 'An unknown error occurred';
+
+  if (config.env.isDev && err.stack) {
+    extraFields.stack = err.stack;
   }
 
-  // Never expose sensitive details in production
-  if (process.env.NODE_ENV === 'production' && statusCode === 500) {
-    message = 'Internal server error';
-  }
-
-  // Build response
-  const response = {
-    status,
-    message,
-    ...responseBody,
-  };
-
-  // Optional: Log error for observability
   if (statusCode >= 500) {
     console.error(`[${new Date().toISOString()}] ${statusCode} Error:`, err);
   }
 
-  res.status(statusCode).json(response);
+  res.status(statusCode).json({
+    status,
+    message,
+    ...extraFields,
+  });
 };
 
 export default errorHandler;

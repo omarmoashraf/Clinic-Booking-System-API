@@ -4,6 +4,9 @@ import { z } from 'zod';
 dotenv.config({ quiet: true });
 
 const envSchema = z.object({
+  NODE_ENV: z
+    .enum(['development', 'test', 'production'])
+    .default('development'),
   PORT: z
     .string()
     .default('3000')
@@ -20,10 +23,14 @@ if (!envParse.success) {
   process.exit(1);
 }
 
-const { PORT, DATABASE_URL } = envParse.data;
+const { NODE_ENV, PORT, DATABASE_URL } = envParse.data;
 
 export default {
   port: PORT,
+  env: {
+    isDev: NODE_ENV === 'development',
+    isProd: NODE_ENV === 'production',
+  },
   db: {
     url: DATABASE_URL,
   },

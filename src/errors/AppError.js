@@ -20,9 +20,19 @@ export class AppError extends Error {
  * 400 Bad Request — request validation failed
  */
 export class ValidationError extends AppError {
-  constructor(message = 'Validation failed', errors = null) {
+  constructor(message = 'Request validation failed', errors = null) {
     super(message, 400, 'validation_error');
     this.errors = errors; // Optional: array of detailed validation errors
+  }
+
+  static fromZodError(error) {
+    const issues = error.issues.map((issue) => ({
+      field: issue.path.join('.') || 'root',
+      message: issue.message,
+      code: issue.code,
+    }));
+
+    return new ValidationError('Request validation failed', issues);
   }
 }
 
@@ -30,7 +40,7 @@ export class ValidationError extends AppError {
  * 404 Not Found
  */
 export class NotFoundError extends AppError {
-  constructor(resource = 'Resource') {
+  constructor(resource = 'Requested resource') {
     super(`${resource} not found`, 404, 'not_found');
     this.resource = resource;
   }
@@ -58,7 +68,7 @@ export class ForbiddenError extends AppError {
  * 409 Conflict — resource already exists or business rule violated
  */
 export class ConflictError extends AppError {
-  constructor(message) {
+  constructor(message = 'Conflict') {
     super(message, 409, 'conflict');
   }
 }
@@ -67,7 +77,7 @@ export class ConflictError extends AppError {
  * 422 Unprocessable Entity — request is well-formed but contains semantic errors
  */
 export class UnprocessableEntityError extends AppError {
-  constructor(message) {
+  constructor(message = 'Unprocessable entity') {
     super(message, 422, 'unprocessable_entity');
   }
 }
