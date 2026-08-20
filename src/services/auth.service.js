@@ -54,7 +54,7 @@ const issueTokens = async(user) =>{
  * 
  
  */
-export const register = async ({email, password , fullname , phone , role, specialtyId}) =>{
+export const register = async ({email, password , fullName , phone , role, specialtyId}) =>{
     const normalizedEmail = email.toLowerCase().trim();
     const existing = await userRepo.findUserByEmail(normalizedEmail);
     if(existing){
@@ -67,7 +67,7 @@ export const register = async ({email, password , fullname , phone , role, speci
         const created = await userRepo.createUser({
             email: normalizedEmail,
             password_hash: passwordHash,
-            full_name: fullname,
+            full_name: fullName,
             phone: phone ?? null,
             role,
         },
