@@ -1,6 +1,7 @@
 import { ZodError } from 'zod';
 import config from '../config/index.js';
 import { AppError, ValidationError } from '../errors/AppError.js';
+import { Prisma } from '../generated/prisma/client.ts';
 
 const INTERNAL_SERVER_ERROR_MESSAGE = 'Internal server error';
 
@@ -43,7 +44,29 @@ const errorHandler = (err, req, res, next) => {
     status = validationError.status;
     message = validationError.message;
     extraFields.errors = validationError.errors;
-  } else {
+  }
+  else if(err instanceof Prisma.PrismaClientKnownRequestError){
+    switch(err.code){
+      case 'P2002':
+      statusCode =409;
+      status='error';
+      message='a resource with provided value already exists';
+      break;
+
+      case 'P2025':
+        statusCode = 404;
+        status = 'error';
+        message = 'The requested resource was not found';
+        break;
+
+      default:
+        statusCode = 500;
+        status = 'error';
+        message = INTERNAL_SERVER_ERROR_MESSAGE;
+        break;
+    }
+  }
+  else {
     statusCode = err.statusCode ?? 500;
 
     if (config.env.isDev || statusCode < 500) {
