@@ -4,18 +4,16 @@
 
 A backend application for managing clinic appointment scheduling. Patients browse doctors, check availability, and book or cancel appointments. Doctors manage their availability and the status of their appointments. Admins manage accounts and specialties. Built with Node.js, Express.js, and PostgreSQL via Prisma.
 
-> Status: Milestone 1 foundation complete. The application has validated configuration, a Prisma/PostgreSQL connection, and a health endpoint. Domain features are planned but not implemented yet.
+> Status: Foundation complete with centralized validation and error handling; authentication implemented (registration, JWT login, rotating refresh tokens, logout, login lockout, admin bootstrap script). Domain features (doctors, availability, appointments, admin management) are planned but not implemented yet.
 
 ## Planned Features
 
-- Registration and JWT-based login, with hashed passwords
 - Role-based authorization (Patient / Doctor / Admin)
 - Doctor profiles and specialties
 - Doctor-managed availability slots
 - Appointment booking with double-booking prevented at the database level
 - Appointment status lifecycle (pending → confirmed → completed, or cancelled)
 - Admin management of users, doctors, and specialties
-- Centralized request validation and error handling
 - Swagger/OpenAPI documentation
 
 ## Tech Stack
@@ -27,9 +25,11 @@ JavaScript
 PostgreSQL
 Prisma
 Zod
+JWT (jsonwebtoken)
+bcrypt
 ```
 
-JWT, password hashing, Swagger, and Docker are planned additions, not current dependencies or features.
+Swagger and Docker are planned additions, not current dependencies or features.
 
 ## Architecture
 
@@ -76,9 +76,22 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for what belongs in each fold
 ```text
 DATABASE_URL=postgresql://user:password@localhost:5432/clinic_booking
 PORT=3000
+JWT_SECRET=<at least 32 characters>
+JWT_ACCESS_EXPIRES_IN=15m
+JWT_REFRESH_EXPIRES_IN=30d
 ```
 
-JWT environment variables will be documented when authentication is implemented.
+Authentication details and decisions (token lifetimes, rotation, reuse detection, lockout policy, anti-enumeration) are documented in [`docs/API.md`](docs/API.md) and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+## Creating the First Admin Account
+
+Admin accounts are never created through the API. Use the local bootstrap script:
+
+```bash
+ADMIN_EMAIL=admin@clinic.test ADMIN_PASSWORD='a-strong-password' ADMIN_FULL_NAME='Clinic Admin' npm run create-admin
+```
+
+The script refuses to run in production and requires the three variables above.
 
 ## Running the Application
 
@@ -117,6 +130,5 @@ Docker Compose is not implemented. Use a locally running PostgreSQL instance for
 
 ## Future Improvements
 
-- Refresh tokens
 - Rate limiting on auth endpoints
 - Basic CI (lint + test) on pull requests

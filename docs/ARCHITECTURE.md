@@ -59,7 +59,7 @@ A small set of custom error classes (e.g. `AppError`, `NotFoundError`, `Validati
 
 ### Configuration
 
-Environment variables are loaded once (via `dotenv`) and read through a single `config` module that validates and parses required variables at startup before exposing them as a typed-feeling object (e.g. `config.jwt.secret`, `config.db.url`). Application modules, including the Prisma client setup, consume this config object rather than reading `process.env` directly. The Prisma CLI separately reads `DATABASE_URL` through `prisma.config.ts` because it runs outside the application process.
+Environment variables are loaded once (via `dotenv`) and read through a single `config` module that validates and parses required variables at startup before exposing them as a typed-feeling object (e.g. `config.jwt.secret`, `config.db.url`). The JWT block (`config.jwt`) carries the signing secret and the access/refresh token lifetimes; the refresh lifetime is parsed to milliseconds for expiry calculation. Application modules, including the Prisma client setup, consume this config object rather than reading `process.env` directly. The Prisma CLI separately reads `DATABASE_URL` through `prisma.config.ts` because it runs outside the application process.
 
 ### Lib
 
@@ -98,19 +98,39 @@ HTTP Response
 
 ## Authentication Architecture
 
+The system uses short-lived access tokens (JWT) and rotating refresh tokens persisted in PostgreSQL:
+
 ```text
 Login request
 → Controller reads credentials
 → AuthService verifies email/password (bcrypt compare)
-→ AuthService signs a JWT (id + role in payload)
-→ Response returns the token to the client
+→ AuthService issues an access token (JWT: sub + role) and an opaque refresh token
+→ Refresh token SHA-256 hash persisted in "RefreshToken" (new rotation family)
+→ Response returns access token, refresh token, and user to the client
+
+Refresh request
+→ AuthService looks up the refresh token by hash
+→ Verifies it exists, is not revoked, has not expired, and the account is active
+→ Rotates: revokes the presented token and issues a new pair (atomic transaction)
+→ Reuse of an already-revoked token revokes the whole family (theft response)
+
+Logout request
+→ AuthService revokes the presented token's family (session chain ended)
 
 Subsequent requests
-→ Client sends "Authorization: Bearer <token>"
+→ Client sends "Authorization: Bearer <access token>"
 → Authentication middleware verifies the token and confirms the user is still active
-→ Decoded { id, role } attached to req.user
+→ Decoded { sub, role } attached to req.user as { id, role }
 → Request proceeds to authorization/validation/controller
 ```
+
+Access tokens live 15 minutes; refresh tokens 30 days. A deactivated account is rejected by the middleware on every protected request (the middleware always re-checks `is_active` against the database) and refresh refuses to issue tokens for it. All of the token, lockout, and revocation state is database-backed — no Redis or other infrastructure is required.
+
+Login failure handling: failed attempts are counted on the `"User"` row (5 attempts → 15 minute lock), and every login failure returns the same generic 401 to avoid user enumeration.
+
+### Password hashing
+
+`src/utils/hash.js` wraps bcrypt (cost factor 10). The service never sees plaintext passwords outside the hashing call, and the hash utility is the only module allowed to import bcrypt.
 
 ## Authorization Architecture
 
@@ -125,13 +145,13 @@ applied per-route after the authentication middleware. It reads `req.user.role` 
 
 Roles: `PATIENT`, `DOCTOR`, `ADMIN`.
 
-Admin accounts have no HTTP creation endpoint. A local-only bootstrap/maintenance process creates them, keeping privileged account provisioning outside the public API.
+Admin accounts have no HTTP creation endpoint. `npm run create-admin` bootstraps admin accounts from local environment variables (`ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_FULL_NAME`) and refuses to run in production, keeping privileged account provisioning outside the public API.
 
 ## Error Handling Architecture
 
 - **Custom application errors** — thrown by services, each with a status code and message (e.g. `throw new ConflictError('Slot is already booked')`).
 - **Validation errors** — produced by the validation middleware when a Zod/Joi schema fails; formatted as a 400 with per-field messages.
-- **Authentication errors** — missing/invalid/expired JWT → 401.
+- **Authentication errors** — missing/invalid/expired token → 401.
 - **Authorization errors** — valid user, wrong role or not the resource owner → 403.
 - **Database errors** — unexpected Prisma errors (e.g. constraint violations not already caught by a service-level check) are caught and mapped to a generic 409/500 rather than leaking raw Prisma error details to the client.
 - **Unexpected errors** — anything uncaught is logged and returned as a generic 500 with no internal details exposed.
@@ -177,6 +197,7 @@ src/
 │   └── admin.service.js
 ├── repositories/
 │   ├── user.repository.js
+│   ├── refresh-token.repository.js
 │   ├── doctor.repository.js
 │   ├── patient.repository.js
 │   ├── specialty.repository.js
@@ -189,8 +210,11 @@ src/
 │   └── appointment.validator.js
 ├── errors/
 │   └── AppError.js  (+ NotFoundError, ValidationError, etc.)
+├── scripts/
+│   └── create-admin.js  (local-only admin bootstrap)
 ├── utils/
-│   └── (small pure helpers, e.g. pagination helpers)
+│   ├── hash.js  (bcrypt wrapper)
+│   └── jwt.js   (access-token sign/verify)
 ├── lib/
 │   ├── prisma.js
 │   └── logger.js

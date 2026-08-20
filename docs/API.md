@@ -4,15 +4,28 @@ Base path for all routes: `/api/v1`
 
 ## Authentication
 
-JWT is sent as a bearer token on every protected request:
+Authentication uses a short-lived **access token** (JWT) plus a long-lived **refresh token** used only for acquiring new tokens.
 
 ```text
-Authorization: Bearer <token>
+Authorization: Bearer <access-token>
 ```
 
-The authentication middleware verifies the token and attaches `{ id, role }` to `req.user`. Public endpoints (registration, login, browsing doctors/availability, viewing specialties) require no token.
+The access token is a JWT containing the user's id (`sub`) and `role`; it expires after **15 minutes**. The authentication middleware verifies the token and attaches `{ id, role }` to `req.user`. Public endpoints (registration, login, browsing doctors/availability, viewing specialties) require no token.
 
 An inactive account cannot log in or use a previously issued token. Authentication verifies that the account remains active on every protected request.
+
+### Tokens
+
+| Token | Format | Lifetime | Purpose |
+|---|---|---|---|
+| Access token | JWT (`{ sub, role }`) | 15 minutes | Authorizes protected requests |
+| Refresh token | Opaque random 96-char string, stored SHA-256-hashed | 30 days | Obtaining new tokens; single-use with rotation |
+
+Refresh tokens are single-use. Every `/auth/refresh` call revokes the presented token and issues a new access + refresh pair. If an already-rotated (revoked) refresh token is presented again, it is treated as possible token theft and the **entire token family** is revoked. Logout revokes the presented token's family. Refresh tokens are stored only as SHA-256 hashes in the `"RefreshToken"` table.
+
+### Login lockout
+
+After **5 consecutive failed login attempts**, the account is locked for **15 minutes**. While locked, even the correct password is rejected. The lockout state lives on the `"User"` row (`failed_login_count`, `locked_until`) and resets on successful login. All login failures — unknown email, wrong password, deactivated account, locked account — return the identical `401 Invalid email or password` response so the API does not reveal which accounts exist.
 
 ## Authorization Matrix
 
@@ -20,6 +33,8 @@ An inactive account cannot log in or use a previously issued token. Authenticati
 |---|---|---|---|---|
 | Register | ✓ | | | |
 | Login | ✓ | | | |
+| Refresh token | ✓ | | | |
+| Logout | | ✓ | ✓ | ✓ |
 | View doctors / doctor detail | ✓ | ✓ | ✓ | ✓ |
 | View doctor availability | ✓ | ✓ | ✓ | ✓ |
 | View specialties | ✓ | ✓ | ✓ | ✓ |
@@ -87,7 +102,7 @@ Non-paginated responses use `{ "status": "success", "data": ... }` without `meta
 
 Authentication: Public
 
-Validation (Zod, conceptually): `email` (valid email), `password` (min 8 chars), `fullName` (non-empty string), `phone` (optional string), `role` (enum: `PATIENT` | `DOCTOR`), `specialtyId` (required UUID if role is `DOCTOR`).
+Validation (Zod): `email` (valid email), `password` (min 8 chars, max 72 chars — the bcrypt limit), `fullName` (non-empty string), `phone` (optional string, max 30 chars), `role` (enum: `PATIENT` | `DOCTOR`), `specialtyId` (required UUID if role is `DOCTOR`).
 
 Request:
 ```json
@@ -108,9 +123,11 @@ Response `201`:
 }
 ```
 
-Errors: `409` email already registered, `400` validation failure.
+Errors: `409` email already registered, `400` validation failure, `404` the `specialtyId` does not exist.
 
-`ADMIN` is not an accepted public-registration role. The first admin and any later admin accounts are created only through the documented local bootstrap/maintenance process, not through this API.
+Registration creates the account and its matching profile row (`Doctor` or `Patient`) in a single transaction. It never auto-authenticates — no tokens are returned; the client must call `/auth/login` afterwards. The response never includes the password hash or any token material.
+
+`ADMIN` is not an accepted public-registration role. The first admin and any later admin accounts are created only through the local bootstrap script (`npm run create-admin`), not through this API.
 
 ### POST /auth/login
 
@@ -129,6 +146,7 @@ Response `200`:
   "status": "success",
   "data": {
     "accessToken": "jwt-token",
+    "refreshToken": "opaque-random-string",
     "user": { "id": "uuid", "role": "PATIENT" }
   }
 }
@@ -136,7 +154,41 @@ Response `200`:
 
 Errors: `401` invalid credentials.
 
-Inactive accounts receive the same `401` response as invalid credentials.
+Every login failure (unknown email, wrong password, deactivated account, locked account) returns the same `401 Invalid email or password`. After 5 failed attempts the account is locked for 15 minutes.
+
+### POST /auth/refresh
+
+Authentication: Public
+
+Purpose: Rotate a refresh token and receive a new access + refresh pair. The presented refresh token is revoked; a new one is issued in its place. Presenting an already-rotated (revoked) refresh token revokes the entire token family.
+
+Validation: `refreshToken` (non-empty string).
+
+Request:
+```json
+{ "refreshToken": "opaque-random-string" }
+```
+
+Response `200`: same shape as login (`accessToken`, `refreshToken`, `user`).
+
+Errors: `401` the token is unknown, expired, revoked, or belongs to a deactivated account.
+
+### POST /auth/logout
+
+Authentication: Required (any role)
+
+Purpose: Revoke the presented refresh token and its whole family, ending the session chain.
+
+Validation: `refreshToken` (non-empty string).
+
+Request:
+```json
+{ "refreshToken": "opaque-random-string" }
+```
+
+Response `204` No Content.
+
+Errors: `401` missing/invalid access token, or the refresh token does not belong to the authenticated user.
 
 ---
 

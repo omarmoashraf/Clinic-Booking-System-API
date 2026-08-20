@@ -1,8 +1,11 @@
 /**
  * Validation middleware factory
  *
- * Receives an object with optional Zod schemas:
- * { body?: ZodSchema, params?: ZodSchema, query?: ZodSchema }
+ * Accepts either:
+ *   - a Zod object whose shape has body/params/query keys
+ *     (e.g. z.object({ body: z.object({...}) })), or
+ *   - a plain object with optional Zod schemas:
+ *     { body?: ZodSchema, params?: ZodSchema, query?: ZodSchema }
  *
  * For each schema provided, validates the corresponding request property
  * and replaces it with the parsed (transformed) result.
@@ -11,23 +14,25 @@
  *
  * Example:
  *   router.post('/appointments',
- *     validate({ body: appointmentSchema, params: paramSchema }),
+ *     validate(appointmentSchema),
  *     controller.createAppointment
  *   );
  */
 const validate = (schemas) => {
+  const sections = schemas && schemas.shape ? schemas.shape : schemas;
+
   return (req, res, next) => {
     try {
-      if (schemas.body) {
-        req.body = schemas.body.parse(req.body);
+      if (sections.body) {
+        req.body = sections.body.parse(req.body);
       }
 
-      if (schemas.params) {
-        req.params = schemas.params.parse(req.params);
+      if (sections.params) {
+        req.params = sections.params.parse(req.params);
       }
 
-      if (schemas.query) {
-        req.query = schemas.query.parse(req.query);
+      if (sections.query) {
+        req.query = sections.query.parse(req.query);
       }
 
       next();
