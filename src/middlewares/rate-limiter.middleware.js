@@ -1,4 +1,5 @@
 import { RateLimiterMemory } from 'rate-limiter-flexible';
+import config from '../config/index.js';
 /**
  * point = request
  * key = req.ip
@@ -22,8 +23,8 @@ const createRateLimiter = (points, duration) => {
     };
 };
 
-export const loginRateLimiter = createRateLimiter(10, 15 * 60);
+export const loginRateLimiter = createRateLimiter(config.rateLimit.loginMax, 15 * 60);
 
-export const registerRateLimiter = createRateLimiter(5, 60 * 60);
+export const registerRateLimiter = createRateLimiter(config.rateLimit.registerMax, 60 * 60);
 
-export const refreshRateLimiter = createRateLimiter(20, 15 * 60);
+export const refreshRateLimiter = createRateLimiter(config.rateLimit.refreshMax, 15 * 60);

@@ -58,6 +58,10 @@ src/
 ├── utils/
 ├── lib/
 └── app.js
+tests/
+├── helpers/       # test DB setup + auth request helpers
+├── auth/          # integration tests for the auth endpoints
+└── middleware/    # authenticate / role middleware tests
 ```
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for what belongs in each folder.
@@ -79,6 +83,14 @@ PORT=3000
 JWT_SECRET=<at least 32 characters>
 JWT_ACCESS_EXPIRES_IN=15m
 JWT_REFRESH_EXPIRES_IN=30d
+```
+
+Optional rate-limit tuning (defaults shown; see docs/API.md for the documented policy):
+
+```text
+RATE_LIMIT_LOGIN_MAX=10
+RATE_LIMIT_REGISTER_MAX=5
+RATE_LIMIT_REFRESH_MAX=20
 ```
 
 Authentication details and decisions (token lifetimes, rotation, reuse detection, lockout policy, anti-enumeration) are documented in [`docs/API.md`](docs/API.md) and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
@@ -122,7 +134,49 @@ npx prisma generate
 
 ## Verification and Testing
 
-`npm run test:db` is a database connectivity smoke check, not an automated test suite. Automated service and integration tests will be added once business features exist.
+`npm run test:db` is a database connectivity smoke check, not an automated test suite.
+
+Automated integration tests live in `tests/` and run with Node's built-in runner
+(`node:test` + `node:assert/strict`) and Supertest against the real Express app and a
+real PostgreSQL **test database** — no mocking of Prisma or the database.
+
+### Configuring the test database
+
+The test environment is defined by `.env.test` (committed; contains only local defaults
+and a throwaway JWT secret). Its `DATABASE_URL` points at a dedicated database,
+`clinic_booking_test`, which **must differ from the development database**. If you use
+different local PostgreSQL credentials, edit `.env.test` accordingly.
+
+No manual step is needed: on every run the suite creates the test database if it is
+missing (requires a role with the CREATEDB privilege) and applies migrations.
+
+### Running tests
+
+```bash
+# full suite (creates DB if needed + prisma migrate deploy, then all tests)
+npm test
+
+# a single test file
+node --env-file=.env.test --test tests/auth/login.test.js
+
+# a single test by name (substring match)
+node --env-file=.env.test --test --test-name-pattern="reuse detection"
+```
+
+### How the test database stays isolated
+
+- The dev database (`clinic_booking`) and test database (`clinic_booking_test`) are
+  separate databases on the same PostgreSQL instance; `npm test` never touches the dev data.
+- Before each test file runs, migrations are applied with `prisma migrate deploy` and
+  **every table is truncated**, so leftover state from previous runs cannot affect results.
+- Every test creates its own users via unique random emails, so tests do not depend on
+  execution order.
+- Test files run one at a time (`--test-concurrency=1`) so their cleanup steps cannot
+  interfere with each other.
+- Time-dependent behavior is handled deterministically instead of waiting: expired access
+  tokens are signed directly with a past expiry, expired refresh tokens are inserted as
+  rows with past `expires_at`, and lockout expiry is simulated by moving `locked_until`
+  into the past in the test database.
 
 ## Docker
 
@@ -130,5 +184,4 @@ Docker Compose is not implemented. Use a locally running PostgreSQL instance for
 
 ## Future Improvements
 
-- Rate limiting on auth endpoints
-- Basic CI (lint + test) on pull requests
+- Basic CI (lint + test) on pull requests — `npm test` is ready to be wired in as-is

@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "nodemon src/app.js",
     "start": "node src/app.js",
+    "test": "node --env-file=.env.test --test --test-concurrency=1",
     "test:db": "node src/test-db.js",
     "create-admin": "node src/scripts/create-admin.js"
   },
@@ -39,6 +40,7 @@
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
-    "prisma": "7.9.1"
+    "prisma": "7.9.1",
+    "supertest": "^7.2.2"
   }
 }

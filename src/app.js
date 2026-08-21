@@ -1,3 +1,4 @@
+import { pathToFileURL } from 'node:url';
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import config from './config/index.js';
@@ -8,7 +9,7 @@ import authRouter from './routes/auth.routes.js';
 
 const app = express();
 
-// Middleware stack
+// Middlewares
 app.use(requestLogger); // Logging must be early
 app.use(express.json());
 app.use(cookieParser());
@@ -27,7 +28,14 @@ app.use((req, res, next) => {
 // Error handling middleware (must be last)
 app.use(errorHandler);
 
-app.listen(config.port, () => {
-  console.log(`Server is running on port ${config.port}`);
-});
+// Start the HTTP server only when this file is executed directly
+// (node src/app.js). When imported (e.g. by tests via supertest),
+// only the configured app is exported.
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+  app.listen(config.port, () => {
+    console.log(`Server is running on port ${config.port}`);
+  });
+}
+
+export default app;
 

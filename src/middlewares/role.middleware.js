@@ -1,4 +1,4 @@
-import { ForbiddenError } from "../errors/AppError";
+import { ForbiddenError } from "../errors/AppError.js";
 
 // use after auth.middleware
 

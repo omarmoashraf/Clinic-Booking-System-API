@@ -245,7 +245,7 @@ Close the remaining known findings from the authentication reviews and add defen
 
 ## Milestone 8 — Testing (Auth Focus)
 
-**Status:** ⬜ Not started
+**Status:** ✅ Completed
 
 **Goal**
 Lock in the authentication system with automated integration tests before building features on top of it.
@@ -263,6 +263,15 @@ Lock in the authentication system with automated integration tests before buildi
   - Role middleware: correct role passes, wrong role → 403, missing user → 403
 - A CI note: the README's "Future Improvements" already calls for basic CI (lint + test) on PRs
 
+**What was implemented**
+- Test stack: Node's built-in `node:test` runner + `node:assert/strict` + Supertest, hitting the real Express app and a real PostgreSQL test database (`clinic_booking_test`) — Prisma/database behavior is not mocked anywhere.
+- `.env.test` defines the dedicated test environment (test `DATABASE_URL`, throwaway JWT secret, raised rate-limit ceilings). It is committed because it contains only local defaults.
+- Each test file runs `prisma migrate deploy` against the test database and truncates every table first; users are created with unique random emails so no test depends on execution order or on a previous run's state. Files run serially (`--test-concurrency=1`) so cleanup cannot race.
+- Deterministic time control without waiting: expired access tokens are signed directly with a past expiry, expired refresh tokens are inserted as rows with past `expires_at`, and lockout expiry is simulated by setting `locked_until` into the past in the test database.
+- Tests: register (patient/doctor happy paths, duplicate email 409, missing specialtyId 400, unknown specialtyId 404, response-contract/no-leak checks), login (valid credentials, wrong password, unknown email, deactivated account — identical 401s), lockout (5 failures → locked → correct password rejected while locked → unlock after simulated expiry), refresh (rotation issues a usable pair, old token dead, reuse revokes the whole family including the legitimate new token, expired rejected, deactivated user rejected, unknown token 401), concurrent refresh (`Promise.all` double-spend: exactly one success + one 401 and the entire family ends revoked — verified in the DB and end-to-end through the API), logout (204 + family revoked, rotated chain fully killed, another user's token rejected without collateral damage), authenticate middleware (missing/malformed/expired/deactivated → 401, valid proceeds) exercised through the real protected `/auth/logout` route, and role middleware (correct role passes, wrong role 403, missing `req.user` 403).
+- Minimal production adjustments made for testability (no behavior changes): `src/app.js` exports the app and only listens when executed directly (avoids port conflicts across test processes); rate-limiter points became env-configurable (`RATE_LIMIT_*_MAX`) with defaults identical to the previous hardcoded values, because all integration requests arrive from one IP and would otherwise exhaust the documented limits mid-suite.
+- The suite caught one latent production bug immediately: `role.middleware.js` imported `../errors/AppError` without the `.js` extension, which cannot resolve under ESM — fixed.
+
 **Engineering concepts learned**
 - Integration testing of HTTP flows against a real database
 - Testing security behavior (lockout, rotation, reuse) — not just happy paths
@@ -270,10 +279,10 @@ Lock in the authentication system with automated integration tests before buildi
 - Test isolation and deterministic time control
 
 **Acceptance criteria**
-- `npm test` runs the full suite against a test database
-- All four auth endpoints covered on happy and failure paths
-- A concurrent-refresh test exists and passes
-- Re-running the suite is deterministic (isolated DB state)
+- ✅ `npm test` runs the full suite against a test database
+- ✅ All four auth endpoints covered on happy and failure paths
+- ✅ A concurrent-refresh test exists and passes
+- ✅ Re-running the suite is deterministic (isolated DB state)
 
 ---
 
@@ -499,24 +508,24 @@ Make the app safe and deployable beyond localhost.
 
 # Overall Project Progress
 
-**Completed milestones (7):**
+**Completed milestones (8):**
 1. Project Foundation & Tooling
 2. Database Design & Prisma Setup
 3. Layered Architecture & Project Structure
 4. Validation & Centralized Error Handling
 5. Authentication & Session Management
 7. Authentication Hardening
+8. Testing (Auth Focus)
 (plus the B9 toolchain fix, which closed Milestone 2's last open item)
 
 **Partially completed (1):**
-6. Authorization Layer — middleware done, not yet applied to any route
+6. Authorization Layer — middleware done (and unit-tested), not yet applied to any route
 
-**Current milestone:** none formally in progress — the auth system is fully hardened and verified; the next decision point is between testing (8) and the first feature (9).
+**Current milestone:** none formally in progress — the auth system is hardened and locked in by an automated integration test suite; the next step is the first feature (9).
 
-**Next milestone (recommended):** Milestone 8 — Testing (Auth Focus), then Milestone 9 — Specialties.
+**Next milestone (recommended):** Milestone 9 — Specialties.
 
-**Remaining major milestones (8 not started):**
-8. Testing (Auth Focus)
+**Remaining major milestones (8 completed, 7 remaining):**
 9. Specialties Module
 10. Doctors Module
 11. Patients Module
@@ -530,13 +539,12 @@ Make the app safe and deployable beyond localhost.
 
 # Recommended Next Step
 
-**Work on Milestone 8 — Testing (Auth Focus) next, then Milestone 9 — Specialties.**
+**Work on Milestone 9 — Specialties next.**
 
 Why:
 
-1. **Milestone 7 — Authentication Hardening is now complete.** The known auth defects (ineffective concurrent-reuse family revocation in `refresh()`, missing Prisma error mapping for duplicate-email races) have been closed with defense-in-depth (rate limiting, refresh-token input bounds, token-storage guidance).
-2. **Every future feature builds on the auth system.** Milestones 9–14 all assume the token lifecycle and role middleware are trustworthy. Verifying them with tests now means features are never built on a moving, unverified foundation.
-3. **Two review rounds found critical bugs that were invisible until the flows were actually executed** (`expires_At` typo, missing `next()`, missing return value). A Milestone 8 integration test suite — register → login → refresh → logout, lockout, concurrent refresh — is precisely the tool that makes those classes of bugs impossible to ship. The README already lists "basic CI (lint + test)" as a planned improvement.
+1. **Milestones 7 and 8 are complete.** The auth system is hardened (rate limiting, rotation with reuse detection, lockout) and locked in by a deterministic integration test suite (`npm test`) covering register → login → refresh → logout, lockout/unlock, and the concurrent-refresh race.
+2. **Every future feature builds on the auth system.** Milestones 9–14 all assume the token lifecycle and role middleware are trustworthy. With the suite in place, any regression in that foundation fails loudly before features ship. The README lists "basic CI (lint + test)" as the planned follow-up; `npm test` is ready to be wired into CI as-is.
 
 After 8, build **Milestone 9 — Specialties** as the first complete feature: it is the smallest vertical slice, exercises `requireRole('ADMIN')` for the first time, and its validator is already drafted in `src/validators/specialty.validator.js`.
 

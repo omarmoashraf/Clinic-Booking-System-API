@@ -16,6 +16,21 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(32, { message: 'JWT_SECRET must be at least 32 characters' }),
   JWT_ACCESS_EXPIRES_IN: z.string().default('15m'),
   JWT_REFRESH_EXPIRES_IN: z.string().default('30d'),
+  RATE_LIMIT_LOGIN_MAX: z
+    .string()
+    .default('10')
+    .transform((value) => Number(value))
+    .pipe(z.number().int().min(1)),
+  RATE_LIMIT_REGISTER_MAX: z
+    .string()
+    .default('5')
+    .transform((value) => Number(value))
+    .pipe(z.number().int().min(1)),
+  RATE_LIMIT_REFRESH_MAX: z
+    .string()
+    .default('20')
+    .transform((value) => Number(value))
+    .pipe(z.number().int().min(1)),
 });
 
 const envParse = envSchema.safeParse(process.env);
@@ -26,8 +41,17 @@ if (!envParse.success) {
   process.exit(1);
 }
 
-const { NODE_ENV, PORT, DATABASE_URL, JWT_SECRET, JWT_ACCESS_EXPIRES_IN, JWT_REFRESH_EXPIRES_IN } =
-  envParse.data;
+const {
+  NODE_ENV,
+  PORT,
+  DATABASE_URL,
+  JWT_SECRET,
+  JWT_ACCESS_EXPIRES_IN,
+  JWT_REFRESH_EXPIRES_IN,
+  RATE_LIMIT_LOGIN_MAX,
+  RATE_LIMIT_REGISTER_MAX,
+  RATE_LIMIT_REFRESH_MAX,
+} = envParse.data;
 
 const parseDurationToMs = (value) => {
   const match = /^(\d+)(s|m|h|d)$/.exec(value);
@@ -52,5 +76,10 @@ export default {
     accessExpiresIn: JWT_ACCESS_EXPIRES_IN,
     refreshExpiresIn: JWT_REFRESH_EXPIRES_IN,
     refreshTokenLifetimeMs: parseDurationToMs(JWT_REFRESH_EXPIRES_IN),
+  },
+  rateLimit: {
+    loginMax: RATE_LIMIT_LOGIN_MAX,
+    registerMax: RATE_LIMIT_REGISTER_MAX,
+    refreshMax: RATE_LIMIT_REFRESH_MAX,
   },
 };
