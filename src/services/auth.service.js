@@ -199,6 +199,7 @@ export const refresh = async(refreshToken) =>{
         const revoked = await refreshTokenRepo.revokeIfActive(stored.id , newTokenHash, tx);
         if(revoked.count === 0){
             reuseDetected = true;
+            await refreshTokenRepo.revokeFamily(stored.family_id,tx);
             return;
         }
 
@@ -214,7 +215,6 @@ export const refresh = async(refreshToken) =>{
     });
 
     if(reuseDetected){
-        await refreshTokenRepo.revokeFamily(stored.family_id);
         throw new UnauthorizedError('Invalid refresh token');
     }
     return {

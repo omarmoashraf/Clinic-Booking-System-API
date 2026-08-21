@@ -8,11 +8,12 @@ import{
 } from '../validators/auth.validator.js'
 import * as authController from '../controllers/auth.controller.js'
 import { authenticate } from '../middlewares/auth.middleware.js';
+import { loginRateLimiter, registerRateLimiter , refreshRateLimiter } from '../middlewares/rate-limiter.middleware.js';
 
 const router = Router();
-router.post('/register', validate(registerSchema),authController.register);
-router.post('/login' , validate(loginSchema), authController.login);
-router.post('/refresh', validate(refreshSchema), authController.refresh);
+router.post('/register',registerRateLimiter, validate(registerSchema),authController.register);
+router.post('/login' ,loginRateLimiter, validate(loginSchema), authController.login);
+router.post('/refresh',refreshRateLimiter, validate(refreshSchema), authController.refresh);
 router.post('/logout', authenticate, validate(logoutSchema), authController.logout);
 
 export default router;

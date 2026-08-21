@@ -34,6 +34,7 @@
     "jsonwebtoken": "^9.0.3",
     "nodemon": "^3.1.14",
     "pg": "^8.23.0",
+    "rate-limiter-flexible": "^11.2.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {

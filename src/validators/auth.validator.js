@@ -6,7 +6,7 @@ const registerPasswordSchema = z.string()
 .min(8, 'Password must be at least 8 charachters')
 .max(72 , 'Password must not exceed 72 charachters');
 
-const refreshTokenSchema = z.string().min(1,'refreshToken is required');
+const refreshTokenSchema = z.string().min(1,'refreshToken is required').max(256);
 
 
 export const registerSchema = z.object({

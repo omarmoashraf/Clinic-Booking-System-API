@@ -73,6 +73,16 @@ Validation errors include a `details` array:
 }
 ```
 
+### Rate limiting
+
+Authentication endpoints are rate-limited per client IP: `POST /auth/login` (10 requests per 15 minutes), `POST /auth/register` (5 requests per hour), `POST /auth/refresh` (20 requests per 15 minutes). When a limit is exceeded the API responds `429 Too Many Requests`:
+
+```json
+{
+  "message": "Too many requests. Please try again later."
+}
+```
+
 ## Pagination and Filtering
 
 List endpoints accept `page` and `limit` query params, plus endpoint-specific filters:
@@ -119,7 +129,7 @@ Response `201`:
 ```json
 {
   "status": "success",
-  "data": { "id": "uuid", "email": "patient@example.com", "role": "PATIENT" }
+  "data": { "id": "uuid", "role": "PATIENT" }
 }
 ```
 

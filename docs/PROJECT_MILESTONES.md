@@ -12,7 +12,7 @@ This roadmap is derived from the actual repository state: the code in `src/`, th
 | 4 | Validation & Centralized Error Handling | ✅ Completed |
 | 5 | Authentication & Session Management | ✅ Completed |
 | 6 | Authorization Layer | 🟡 Partially completed |
-| 7 | Authentication Hardening | ⬜ Not started |
+| 7 | Authentication Hardening | ✅ Completed |
 | 8 | Testing (Auth Focus) | ⬜ Not started |
 | 9 | Specialties Module (First Feature) | ⬜ Not started |
 | 10 | Doctors Module | ⬜ Not started |
@@ -219,7 +219,7 @@ The middleware exists and is correct (`src/middlewares/role.middleware.js`, now 
 
 ## Milestone 7 — Authentication Hardening
 
-**Status:** ⬜ Not started
+**Status:** ✅ Completed
 
 **Goal**
 Close the remaining known findings from the authentication reviews and add defense-in-depth to the auth surface.
@@ -228,7 +228,6 @@ Close the remaining known findings from the authentication reviews and add defen
 - **Concurrent-reuse family revocation:** in `refresh()`, when `revokeIfActive` returns `count === 0`, the current fix calls `revokeFamily` *inside* the transaction and then throws — Prisma rolls the revocation back, so the family survives. Restructure so the family revocation runs **outside** the transaction (e.g. flag the reuse, exit the transaction, revoke, then throw), making concurrent reuse behave like sequential reuse.
 - **Rate limiting** on `/auth/login`, `/auth/register`, `/auth/refresh` (in-memory limiter is fine at this scale) so the lockout isn't the only brute-force defense.
 - **Refresh-token input bounds:** cap `refreshToken` length in the validator (e.g. max 256) — arbitrary-length strings currently pass `min(1)` only.
-- **API consistency:** register response should include `email` per `docs/API.md` (currently `{ id, role }` only).
 - **Client-side token storage guidance:** document (in the API docs) that tokens returned in the response body must not live in `localStorage` without acknowledging the XSS exposure; the httpOnly-cookie alternative is a deliberate tradeoff, not a change.
 
 **Engineering concepts learned**
@@ -500,23 +499,23 @@ Make the app safe and deployable beyond localhost.
 
 # Overall Project Progress
 
-**Completed milestones (6):**
+**Completed milestones (7):**
 1. Project Foundation & Tooling
 2. Database Design & Prisma Setup
 3. Layered Architecture & Project Structure
 4. Validation & Centralized Error Handling
 5. Authentication & Session Management
+7. Authentication Hardening
 (plus the B9 toolchain fix, which closed Milestone 2's last open item)
 
 **Partially completed (1):**
 6. Authorization Layer — middleware done, not yet applied to any route
 
-**Current milestone:** none formally in progress — the auth system is complete and verified; the next decision point is between hardening/testing (7–8) and the first feature (9).
+**Current milestone:** none formally in progress — the auth system is fully hardened and verified; the next decision point is between testing (8) and the first feature (9).
 
-**Next milestone (recommended):** Milestone 7 — Authentication Hardening, then Milestone 8 — Testing (Auth Focus).
+**Next milestone (recommended):** Milestone 8 — Testing (Auth Focus), then Milestone 9 — Specialties.
 
-**Remaining major milestones (9 not started):**
-7. Authentication Hardening
+**Remaining major milestones (8 not started):**
 8. Testing (Auth Focus)
 9. Specialties Module
 10. Doctors Module
@@ -531,15 +530,15 @@ Make the app safe and deployable beyond localhost.
 
 # Recommended Next Step
 
-**Work on Milestone 7 — Authentication Hardening first, then Milestone 8 — Testing (Auth Focus).**
+**Work on Milestone 8 — Testing (Auth Focus) next, then Milestone 9 — Specialties.**
 
 Why:
 
-1. **There are two known, small, security-relevant defects in the auth system today.** The concurrent-reuse fix in `refresh()` is ineffective — `revokeFamily` runs inside a transaction that Prisma rolls back when the throw happens — and the error middleware has no Prisma mapping (duplicate-email races return 500 instead of 409). Both are a few lines each and are prerequisite-quality work.
-2. **Every future feature builds on the auth system.** Milestones 9–14 all assume the token lifecycle and role middleware are trustworthy. Hardening and testing them now means features are never built on a moving, unverified foundation.
+1. **Milestone 7 — Authentication Hardening is now complete.** The known auth defects (ineffective concurrent-reuse family revocation in `refresh()`, missing Prisma error mapping for duplicate-email races) have been closed with defense-in-depth (rate limiting, refresh-token input bounds, token-storage guidance).
+2. **Every future feature builds on the auth system.** Milestones 9–14 all assume the token lifecycle and role middleware are trustworthy. Verifying them with tests now means features are never built on a moving, unverified foundation.
 3. **Two review rounds found critical bugs that were invisible until the flows were actually executed** (`expires_At` typo, missing `next()`, missing return value). A Milestone 8 integration test suite — register → login → refresh → logout, lockout, concurrent refresh — is precisely the tool that makes those classes of bugs impossible to ship. The README already lists "basic CI (lint + test)" as a planned improvement.
 
-After 7 and 8, build **Milestone 9 — Specialties** as the first complete feature: it is the smallest vertical slice, exercises `requireRole('ADMIN')` for the first time, and its validator is already drafted in `src/validators/specialty.validator.js`.
+After 8, build **Milestone 9 — Specialties** as the first complete feature: it is the smallest vertical slice, exercises `requireRole('ADMIN')` for the first time, and its validator is already drafted in `src/validators/specialty.validator.js`.
 
 ---
 
