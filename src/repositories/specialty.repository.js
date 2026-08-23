@@ -5,7 +5,7 @@ export const findById = (id, client = prisma) => {
 };
 
 export const findByName = (name , client = prisma) =>{
-  return client.specialty.findUnique({where: name});
+  return client.specialty.findUnique({where: {name}});
 }
 
 export const findAll = async (

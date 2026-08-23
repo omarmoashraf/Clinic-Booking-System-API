@@ -53,6 +53,12 @@ const errorHandler = (err, req, res, next) => {
       message='a resource with provided value already exists';
       break;
 
+      case 'P2003':
+        statusCode = 409;
+        status= 'error';
+        message = 'The resource cannot be deleted because it is still referenced';
+        break;
+
       case 'P2025':
         statusCode = 404;
         status = 'error';

@@ -60,25 +60,10 @@ export const deleteSpecialtySchema = z.object({
 // LIST Specialties with filters: GET /specialties
 export const listSpecialtiesSchema = z.object({
   query: z.object({
-    page: z
-      .string()
-      .optional()
-      .transform((val) => (val ? Number(val) : 1))
-      .refine(
-        (num) => num >= 1,
-        'Page must be a positive integer'
-      ),
-    limit: z
-      .string()
-      .optional()
-      .transform((val) => (val ? Number(val) : 10))
-      .refine(
-        (num) => num >= 1 && num <= 100,
-        'Limit must be between 1 and 100'
-      ),
-    search: z
-      .string()
-      .optional()
-      .transform((val) => (val ? val.trim() : undefined)),
+    page: z.coerce.number().int().min(1).default(1),
+
+    limit: z.coerce.number().int().min(1).max(100).default(10),
+
+    search: z.string().trim().optional(),
   }),
 });

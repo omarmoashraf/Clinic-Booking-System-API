@@ -13,6 +13,7 @@ import request from 'supertest';
 import app from '../../src/app.js';
 import prisma from '../../src/lib/prisma.js';
 import config from '../../src/config/index.js';
+import { hashPassword } from '../../src/utils/hash.js';
 
 export const TEST_PASSWORD = 'Password123!';
 
@@ -78,14 +79,44 @@ export async function createAuthenticatedUser(roleOverrides = {}) {
 }
 
 /**
- * Create a Specialty row directly. There is no admin API yet
- * (specialties arrive in Milestone 9), so tests seed this fixture
- * through Prisma.
+ * Create a Specialty row directly. Used for fixtures where going through
+ * the admin API would add no value (e.g. deterministic bulk seeding,
+ * or specialties that must exist before an ADMIN token is available).
  */
 export function createSpecialty(name) {
   return prisma.specialty.create({
     data: { name: name ?? `Specialty-${crypto.randomUUID()}` },
   });
+}
+
+/**
+ * Create an ADMIN user directly (public registration refuses ADMIN)
+ * and log in through the real API to obtain tokens.
+ */
+export async function createAdmin() {
+  const email = uniqueEmail('admin');
+  await prisma.user.create({
+    data: {
+      email,
+      password_hash: await hashPassword(TEST_PASSWORD),
+      full_name: 'Test Admin',
+      role: 'ADMIN',
+    },
+  });
+
+  const loginResponse = await loginRequest(email, TEST_PASSWORD);
+  if (loginResponse.status !== 200) {
+    throw new Error(`test setup: admin login failed: ${JSON.stringify(loginResponse.body)}`);
+  }
+
+  return {
+    userId: loginResponse.body.data.user.id,
+    email,
+    password: TEST_PASSWORD,
+    role: 'ADMIN',
+    accessToken: loginResponse.body.data.accessToken,
+    refreshToken: loginResponse.body.data.refreshToken,
+  };
 }
 
 /**

@@ -37,7 +37,7 @@ After **5 consecutive failed login attempts**, the account is locked for **15 mi
 | Logout | | ✓ | ✓ | ✓ |
 | View doctors / doctor detail | ✓ | ✓ | ✓ | ✓ |
 | View doctor availability | ✓ | ✓ | ✓ | ✓ |
-| View specialties | ✓ | ✓ | ✓ | ✓ |
+| View specialties (list & detail) | ✓ | ✓ | ✓ | ✓ |
 | Update own doctor profile | | | ✓ | |
 | Update own patient profile | | ✓ | | |
 | Create/delete own availability | | | ✓ | |
@@ -92,13 +92,13 @@ GET /doctors?page=1&limit=10&specialty=cardiology
 GET /appointments/me?page=1&limit=10&status=CONFIRMED
 ```
 
-Defaults: `page=1`, `limit=10`, `limit` capped at 50. Paginated responses are wrapped:
+Defaults: `page=1`, `limit=10`, `limit` capped at 100. Paginated responses are wrapped:
 
 ```json
 {
   "status": "success",
   "data": [ ... ],
-  "meta": { "page": 1, "limit": 10, "total": 42 }
+  "meta": { "page": 1, "limit": 10, "total": 42, "totalPages": 5 }
 }
 ```
 
@@ -254,31 +254,81 @@ Errors: `400` validation failure.
 
 ## Specialties Module
 
+A small, admin-managed lookup table. Listing and detail views are public; creating, updating, and deleting require ADMIN.
+
+Duplicate names are guarded at two levels: the service checks first (friendly 409), and the database unique constraint is the race backstop (`P2002` → 409). Deleting a specialty that is concurrently assigned to a doctor surfaces through the foreign key as `P2003` → 409. `P2025` → 404.
+
 ### GET /specialties
 
 Authentication: Public
 
-Response `200`: array of `{ id, name }`.
+Query params: `page` (optional, default 1, minimum 1), `limit` (optional, default 10, max 100), `search` (optional)
+
+Search filters by specialty name using case-insensitive contains semantics; the same filter applies to the returned rows and to `meta.total`. Results are ordered by name ascending for deterministic pagination.
+
+Response `200`:
+
+```json
+{
+  "status": "success",
+  "data": [
+    { "id": "uuid", "name": "Cardiology", "created_at": "timestamp" }
+  ],
+  "meta": { "page": 1, "limit": 10, "total": 42, "totalPages": 5 }
+}
+```
+
+Errors: `400` invalid query parameters.
+
+### GET /specialties/:id
+
+Authentication: Public
+
+Path param: `id` (UUID).
+
+Response `200`: a single specialty object (`{ id, name, created_at }`).
+
+Errors: `400` malformed UUID, `404` specialty not found.
 
 ### POST /specialties
 
 Authentication: Required — Role: ADMIN
 
-Validation: `name` (non-empty string)
+Validation: `name` (required string, trimmed, 2–100 characters; letters, spaces, hyphens, and ampersands only).
 
-Errors: `409` name already exists.
+Request:
+```json
+{ "name": "Cardiology" }
+```
+
+Response `201`: the created specialty object.
+
+Errors: `400` validation failure, `401` unauthenticated, `403` non-admin, `409` name already exists (`"Specialty with this name already exists"`). Two concurrent creates with the same name produce one success and one 409 via the unique-constraint backstop.
 
 ### PATCH /specialties/:id
 
 Authentication: Required — Role: ADMIN
 
-Validation: `name` (optional string)
+Validation: `name` (**required** string, trimmed, 2–100 characters).
+
+Updating a specialty to its own current name succeeds with `200`. A name that belongs to a different specialty returns `409`.
+
+Request:
+```json
+{ "name": "Neurology" }
+```
+
+Response `200`: the updated specialty object.
+
+Errors: `400` validation failure, `401` unauthenticated, `403` non-admin, `404` specialty not found, `409` name belongs to another specialty.
 
 ### DELETE /specialties/:id
 
 Authentication: Required — Role: ADMIN
 
-Errors: `409` a doctor is still assigned to this specialty.
+Response `204` No Content (empty body).
+
+Errors: `401` unauthenticated, `403` non-admin, `404` specialty not found, `409` a doctor is still assigned to this specialty (service-level doctor count; the FK `ON DELETE RESTRICT` constraint is the race backstop).
 
 ---
 

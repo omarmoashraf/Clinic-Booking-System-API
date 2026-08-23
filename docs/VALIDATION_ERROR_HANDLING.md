@@ -154,6 +154,7 @@ Error bubbles up to error middleware
 Middleware checks error type
          ├─ AppError? → Use statusCode and status
          ├─ ZodError? → Already converted to ValidationError
+         ├─ Prisma known request error? → Map code: P2002 → 409, P2003 → 409, P2025 → 404
          └─ Generic Error? → Default to 500
          ↓
 Format and send HTTP response

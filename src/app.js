@@ -6,6 +6,7 @@ import errorHandler from './middlewares/error.middleware.js';
 import requestLogger from './middlewares/logging.middleware.js';
 import healthRouter from './routes/healthCheck.js';
 import authRouter from './routes/auth.routes.js';
+import specialtyRouter from './routes/specialty.routes.js'
 
 const app = express();
 
@@ -17,6 +18,7 @@ app.use(cookieParser());
 // Routes
 app.use('/api/v1', healthRouter);
 app.use('/api/v1/auth', authRouter);
+app.use('/api/v1' , specialtyRouter);
 
 // 404 handler for undefined routes
 app.use((req, res, next) => {

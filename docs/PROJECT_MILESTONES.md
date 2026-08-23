@@ -13,8 +13,8 @@ This roadmap is derived from the actual repository state: the code in `src/`, th
 | 5 | Authentication & Session Management | ✅ Completed |
 | 6 | Authorization Layer | 🟡 Partially completed |
 | 7 | Authentication Hardening | ✅ Completed |
-| 8 | Testing (Auth Focus) | ⬜ Not started |
-| 9 | Specialties Module (First Feature) | ⬜ Not started |
+| 8 | Testing (Auth Focus) | ✅ Completed |
+| 9 | Specialties Module (First Feature) | 🟡 In progress |
 | 10 | Doctors Module | ⬜ Not started |
 | 11 | Patients Module | ⬜ Not started |
 | 12 | Availability & Scheduling | ⬜ Not started |
@@ -288,7 +288,7 @@ Lock in the authentication system with automated integration tests before buildi
 
 ## Milestone 9 — Specialties Module (First Feature)
 
-**Status:** ⬜ Not started
+**Status:** 🟡 In progress
 
 **Goal**
 The first complete feature end-to-end — a small admin-managed lookup table that exercises every layer and the authorization middleware for the first time.
@@ -302,7 +302,17 @@ The first complete feature end-to-end — a small admin-managed lookup table tha
 - `specialty.repository.js` additions: `findAll` (paginated), `findByName`, `update`, `remove`
 
 **Current state**
-Skeleton only: `src/validators/specialty.validator.js` already defines all four schemas (with pagination transforms), and `src/repositories/specialty.repository.js` has `findById` (used by registration). No controller, service, or routes exist.
+In progress — the service, repository, and controller layers are implemented; routes and tests are not yet.
+
+- `src/repositories/specialty.repository.js`: `findById`, `findByName`, `findAll` (pagination + optional case-insensitive `contains` name search shared by `findMany` and `count`, ordered by `name` ascending), `createSpecialty`, `updateSpecialty(id, data)`, `deleteSpecialty(id)` — all transaction-friendly via the `(arg, client = prisma)` pattern.
+- `src/services/specialties.service.js`: `list` (returns `{ specialties, total, meta }` with `page`/`limit`/`total`/`totalPages`), `create` (duplicate-name check → 409 `"Specialty with this name already exists"`), `update` (404 when missing; renaming to its own current name succeeds; a name owned by a different specialty → 409), `getById` (specialty or 404), `remove` (404 when missing; 409 while doctors are still assigned).
+- `src/controllers/specialties.controller.js`: thin handlers for all five operations (`201` create, `200` list/update/get, `204` delete, errors forwarded to the centralized handler).
+- Error middleware: `P2003` → 409 added alongside the existing `P2002` → 409 and `P2025` → 404 mappings, so both race backstops (unique name, FK on delete) resolve to 409.
+
+The implementation adds `GET /specialties/:id` (public) beyond the four originally planned endpoints; `docs/API.md` documents it.
+
+**What remains**
+`src/routes/specialties.routes.js` with `authenticate` → `requireRole('ADMIN')` → `validate(schema)` wiring for the admin endpoints, mounting in `app.js` (until then no specialty endpoint is reachable over HTTP), and the integration test suite. Acceptance criteria are not yet met.
 
 **Engineering concepts learned**
 - Building a complete vertical slice through all layers
@@ -521,7 +531,7 @@ Make the app safe and deployable beyond localhost.
 **Partially completed (1):**
 6. Authorization Layer — middleware done (and unit-tested), not yet applied to any route
 
-**Current milestone:** none formally in progress — the auth system is hardened and locked in by an automated integration test suite; the next step is the first feature (9).
+**Current milestone:** Milestone 9 — Specialties (in progress: repository, service, and controller layers implemented; route wiring, `app.js` mounting, and tests outstanding).
 
 **Next milestone (recommended):** Milestone 9 — Specialties.
 
