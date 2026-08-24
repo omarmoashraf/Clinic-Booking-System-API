@@ -15,7 +15,7 @@ This roadmap is derived from the actual repository state: the code in `src/`, th
 | 7 | Authentication Hardening | ✅ Completed |
 | 8 | Testing (Auth Focus) | ✅ Completed |
 | 9 | Specialties Module (First Feature) | 🟡 In progress |
-| 10 | Doctors Module | ⬜ Not started |
+| 10 | Doctors Module | ✅ Completed |
 | 11 | Patients Module | ⬜ Not started |
 | 12 | Availability & Scheduling | ⬜ Not started |
 | 13 | Appointments & Booking | ⬜ Not started |
@@ -329,7 +329,7 @@ The implementation adds `GET /specialties/:id` (public) beyond the four original
 
 ## Milestone 10 — Doctors Module
 
-**Status:** ⬜ Not started
+**Status:** ✅ Completed
 
 **Goal**
 Public doctor directory plus doctor self-service profile management.
@@ -342,16 +342,29 @@ Public doctor directory plus doctor self-service profile management.
 - Doctor profile updates must go through the owning `User` (the doctor is identified via `req.user` → their `Doctor` row)
 - Add `GET /users/me` (any role) returning the user merged with their doctor/patient profile, or implement it in the Patients milestone — decide and document which milestone owns it
 
+**Current state**
+Complete. Implemented end-to-end following the specialties pattern:
+
+- `src/routes/doctors.routes.js`: `GET /doctors` and `GET /doctors/:id` are public (validator only); `PATCH /doctors/me` is wired `authenticate` → `requireRole('DOCTOR')` → `validate(updateDoctorSchema)`. Mounted in `app.js`.
+- `src/repositories/doctor.repository.js`: added `findMany` (optional specialty filter resolved to a relation `where`, `skip`/`take`, parallel count), `findById` (includes only the owner's `full_name` and the specialty `id`/`name`), `findByUserId`, and `update`. Only public fields are selected — no email, password hash, or auth state ever leaves the repository for these queries.
+- `src/services/doctors.service.js`: `list` (returns `{ doctors, meta }` with `page`/`limit`/`total`/`totalPages`), `getById` (404 when missing), `updateOwnProfile(userId, { bio, specialtyId })`. Rows are mapped to the documented public shape `{ id, fullName, specialty: { id, name }, bio }` in the service before reaching a controller.
+- `src/controllers/doctors.controller.js` + `src/validators/doctor.validator.js`: thin handlers; Zod schemas follow the specialty conventions (pagination defaults 1/10 capped at 100, UUID params, optional trimmed non-empty `bio` ≤ 1000 chars, optional `specialtyId` UUID).
+- Integration tests: `tests/doctors/doctors.test.js` (anonymous listing, exact pagination slices/metadata, filtering by name and id, detail + 404/400, self-update persistence, unknown-specialtyId 404, validation 400s, role matrix 401/403, cross-doctor ownership).
+
+**Ownership:** `PATCH /doctors/me` resolves the Doctor row via `doctorRepo.findByUserId(req.user.id)` — the id comes from the verified token (and the DB-active recheck in `authenticate`), never from client input. There is no route accepting a doctor id for updates, so another doctor's profile is unreachable by construction.
+
+**`GET /users/me` decision:** owned by **Milestone 11 (Patients Module)**, matching this roadmap's existing assignment of the endpoint. Its substance is merging the base account with the *role-specific* profile — work that lands with the patient profile in Milestone 11 anyway — and nothing in the Doctors module depends on it, so implementing it here would duplicate Milestone 11 scope without serving any M10 endpoint.
+
 **Engineering concepts learned**
 - Public read vs. authenticated write on the same resource
 - The "own profile" pattern: `req.user` → profile row → service-level ownership
 - Filtering + pagination queries with Prisma `include`
 
 **Acceptance criteria**
-- Anonymous users can browse the doctor directory
-- A DOCTOR can update only their own profile; other roles get 403
-- Specialty filter works by name and by id
-- Pagination metadata matches `docs/API.md`
+- ✅ Anonymous users can browse the doctor directory
+- ✅ A DOCTOR can update only their own profile; other roles get 403
+- ✅ Specialty filter works by name and by id
+- ✅ Pagination metadata matches `docs/API.md`
 
 ---
 
@@ -531,9 +544,9 @@ Make the app safe and deployable beyond localhost.
 **Partially completed (1):**
 6. Authorization Layer — middleware done (and unit-tested), not yet applied to any route
 
-**Current milestone:** Milestone 9 — Specialties (in progress: repository, service, and controller layers implemented; route wiring, `app.js` mounting, and tests outstanding).
+**Current milestone:** Milestone 10 — Doctors Module ✅ Completed (public directory with specialty name/id filtering, public detail, DOCTOR self-service profile updates; `/users/me` deferred to Milestone 11 — see the decision note above).
 
-**Next milestone (recommended):** Milestone 9 — Specialties.
+**Next milestone (recommended):** Milestone 11 — Patients Module.
 
 **Remaining major milestones (8 completed, 7 remaining):**
 9. Specialties Module

@@ -222,13 +222,34 @@ Authentication: Public
 
 Query params: `page`, `limit`, `specialty` (specialty name or id, optional)
 
+The `specialty` filter matches a specialty id, or a specialty name case-insensitively; an unknown specialty yields an empty page, not an error.
+
 Response `200`: paginated list of `{ id, fullName, specialty, bio }`.
+
+```json
+{
+  "status": "success",
+  "data": [
+    {
+      "id": "uuid",
+      "fullName": "Jane Doe",
+      "specialty": { "id": "uuid", "name": "Cardiology" },
+      "bio": "Short professional bio"
+    }
+  ],
+  "meta": { "page": 1, "limit": 10, "total": 42, "totalPages": 5 }
+}
+```
+
+Errors: `400` invalid query parameters.
 
 ### GET /doctors/:id
 
 Authentication: Public
 
-Errors: `404` not found.
+Response `200`: `{ "status": "success", "data": { "id", "fullName", "specialty", "bio" } }`.
+
+Errors: `400` malformed UUID, `404` doctor not found.
 
 ### PATCH /doctors/me
 
@@ -236,7 +257,11 @@ Authentication: Required — Role: DOCTOR
 
 Validation: `bio` (optional string), `specialtyId` (optional UUID)
 
-Errors: `400` validation failure.
+The doctor being updated is always resolved from the authenticated user (`req.user` → their own `Doctor` row); there is no client-supplied doctor id on this endpoint.
+
+Response `200`: the updated doctor object (`{ id, fullName, specialty, bio }`). An empty body is a valid no-op returning the current profile.
+
+Errors: `401` unauthenticated, `403` non-DOCTOR, `400` validation failure, `404` the `specialtyId` does not exist.
 
 ---
 

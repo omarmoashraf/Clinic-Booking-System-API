@@ -33,7 +33,7 @@ export const create = async (name) => {
 export const getById = async(id) =>{
     const specialty = await specialtyRepo.findById(id);
     if(!specialty){
-        throw new NotFoundError('specialty not found');
+        throw new NotFoundError('Specialty');
     }
 
     return specialty ;
@@ -42,7 +42,7 @@ export const getById = async(id) =>{
 export const update = async(id,name) =>{
     const specialty = await specialtyRepo.findById(id);
     if(!specialty){
-        throw new NotFoundError('Specialty not found');
+        throw new NotFoundError('Specialty');
     }
 
     const existingSpecialty = await specialtyRepo.findByName(name);
@@ -58,7 +58,7 @@ export const update = async(id,name) =>{
 export const remove = async(id) =>{
     const specialty = await specialtyRepo.findById(id);
     if(!specialty){
-        throw new NotFoundError('specialty not Found');
+        throw new NotFoundError('Specialty');
     }
 
     const doctorCount = await doctorRepo.countBySpecialtyId(id);
