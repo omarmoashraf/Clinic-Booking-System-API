@@ -4,7 +4,7 @@
 
 A backend application for managing clinic appointment scheduling. Patients browse doctors, check availability, and book or cancel appointments. Doctors manage their availability and the status of their appointments. Admins manage accounts and specialties. Built with Node.js, Express.js, and PostgreSQL via Prisma.
 
-> Status: Foundation complete with centralized validation and error handling; authentication implemented (registration, JWT login, rotating refresh tokens, logout, login lockout, admin bootstrap script). Domain features (doctors, availability, appointments, admin management) are planned but not implemented yet.
+> Status: Foundation complete with centralized validation and error handling; authentication hardened (registration, JWT login, rotating refresh tokens, logout, login lockout). Domain features implemented: specialties management, doctor directory and self-service profiles, patient profiles with the merged `/users/me`, and doctor-owned availability slots with overlap prevention. Appointments booking and admin management are planned but not implemented yet.
 
 ## Planned Features
 

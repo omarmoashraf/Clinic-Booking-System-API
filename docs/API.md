@@ -403,31 +403,61 @@ Errors: `401` unauthenticated, `403` non-admin, `404` specialty not found, `409`
 
 ## Availability Module
 
+All availability endpoints speak clinic-local wall-clock values: `date` is a date-only `YYYY-MM-DD` string, `startTime`/`endTime` are `HH:mm` 24-hour strings. The clinic timezone is `Africa/Cairo` (fixed by the PRD); slots are stored as a local date plus local start/end times and are never converted through instants, so no multi-timezone support exists and server/browser timezones never affect what is stored or returned.
+
 ### GET /doctors/:doctorId/availability
 
 Authentication: Public
 
-Purpose: List a doctor's `AVAILABLE` slots.
+Purpose: List a doctor's `AVAILABLE` slots. `BOOKED` slots are filtered out in the database query and are never exposed through this endpoint.
 
-Query params: `from` (date, optional), `to` (date, optional)
+Path param: `doctorId` (UUID).
 
-Response `200`: array of `{ id, date, startTime, endTime }`.
+Query params: `from` (date, optional), `to` (date, optional) — inclusive bounds on the slot date (`from <= date <= to`). Any combination is valid: neither, `from` only, `to` only, or both; when both are present, `to` must not be earlier than `from`.
+
+Response `200`: array of `{ id, date, startTime, endTime }`, ordered by date then start time.
+
+```json
+{
+  "status": "success",
+  "data": [
+    { "id": "uuid", "date": "2026-09-01", "startTime": "09:30", "endTime": "11:00" }
+  ]
+}
+```
+
+A doctor with no matching available slots returns `"data": []`, not an error.
+
+Errors: `400` malformed `doctorId` UUID or invalid `from`/`to` dates, `404` the doctor does not exist.
 
 ### POST /doctors/me/availability
 
 Authentication: Required — Role: DOCTOR
 
-Validation: `date` (date string), `startTime` (HH:mm), `endTime` (HH:mm, must be after `startTime`)
+Validation: `date` (exactly `YYYY-MM-DD`, must be a real calendar date), `startTime` (`HH:mm` 24-hour), `endTime` (`HH:mm` 24-hour, must be strictly after `startTime`).
 
-Errors: `400` invalid time range, `409` overlaps an existing slot.
+The owning doctor is always resolved from the authenticated user (`req.user` → their own `Doctor` row); there is no client-supplied doctor id on this endpoint. Unknown body fields are ignored.
 
-Scheduling uses the clinic timezone `Africa/Cairo`. Slots are individual local date/time intervals; adjacent slots are allowed. For the same doctor and date, an attempted slot overlaps when `newStart < existingEnd` and `newEnd > existingStart`; the service rejects it with `409`.
+Request:
+```json
+{ "date": "2026-09-01", "startTime": "09:30", "endTime": "11:00" }
+```
+
+Response `201`: the created slot (`{ id, date, startTime, endTime }`) in the same shape as the listing above.
+
+Errors: `401` unauthenticated, `403` non-DOCTOR, `400` validation failure (including an inverted or zero-length interval), `404` the authenticated DOCTOR has no Doctor profile row, `409` overlaps an existing slot.
+
+Scheduling uses the clinic timezone `Africa/Cairo`. Slots are individual local date/time intervals; adjacent slots are allowed. For the same doctor and date, an attempted slot overlaps when `newStart < existingEnd` and `newEnd > existingStart`; the service rejects it with `409`. Identical times on different dates, and identical slots owned by different doctors, are both allowed. The overlap check is service-level; the database independently enforces only `end_time > start_time` via a `CHECK` constraint, so two truly concurrent create requests for an overlapping slot could both pass the service check (a documented tradeoff of this milestone).
 
 ### DELETE /doctors/me/availability/:id
 
 Authentication: Required — Role: DOCTOR
 
-Errors: `403` slot doesn't belong to the requester, `409` slot is already booked.
+Purpose: Delete one of the authenticated doctor's own slots. Ownership flows strictly `req.user` → `Doctor` → `Availability`; another doctor's slot returns `403` without being deleted, and a booked slot cannot be deleted.
+
+Response `204` No Content (empty body).
+
+Errors: `401` unauthenticated, `403` non-DOCTOR or the slot belongs to another doctor, `400` malformed slot id, `404` the slot does not exist, `409` the slot is already booked.
 
 ---
 

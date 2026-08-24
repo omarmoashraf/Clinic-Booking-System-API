@@ -17,7 +17,7 @@ This roadmap is derived from the actual repository state: the code in `src/`, th
 | 9 | Specialties Module (First Feature) | ✅ Completed |
 | 10 | Doctors Module | ✅ Completed |
 | 11 | Patients Module | ✅ Completed |
-| 12 | Availability & Scheduling | ⬜ Not started |
+| 12 | Availability & Scheduling | ✅ Completed |
 | 13 | Appointments & Booking | ⬜ Not started |
 | 14 | Admin Module | ⬜ Not started |
 | 15 | API Documentation (Swagger) | ⬜ Not started |
@@ -409,7 +409,7 @@ Complete. Implemented end-to-end following the doctors pattern:
 
 ## Milestone 12 — Availability & Scheduling
 
-**Status:** ⬜ Not started
+**Status:** ✅ Completed
 
 **Goal**
 Doctors define individual bookable slots; patients can view a doctor's open slots; slot overlap is prevented.
@@ -423,6 +423,19 @@ Doctors define individual bookable slots; patients can view a doctor's open slot
 - Interpret dates/times in the clinic timezone `Africa/Cairo` (no multi-timezone support, per PRD)
 - Availability validator (`src/validators/availability.validator.js` — not yet created)
 
+**Current state**
+Complete. Implemented end-to-end following the doctors/patients pattern:
+
+- `src/routes/availability.routes.js`: `GET /doctors/:doctorId/availability` is public (validator only); `POST /doctors/me/availability` and `DELETE /doctors/me/availability/:id` are wired `authenticate` → `requireRole('DOCTOR')` → `validate(schema)`. `/me` routes are registered before the `:doctorId` route. Mounted in `app.js`.
+- `src/repositories/availability.repository.js`: `findById`, `findManyByDoctor` (status + inclusive date-range filtering entirely in SQL, ordered by date/time), `findOverlapping` (the strict-inequality probe), `createAvailability`, `deleteAvailability` — all transaction-friendly via the `(data, client = prisma)` pattern.
+- `src/services/availability.service.js`: `listAvailableSlots` (404 for unknown doctor; AVAILABLE-only DB filtering), `createSlot` (ownership via `req.user.id → findByUserId`, service-level `end > start` re-check as defense in depth, overlap probe → 409), `deleteSlot` (404 unknown, 403 foreign slot, 409 booked). Rows map to the documented public shape `{ id, date, startTime, endTime }` before reaching a controller.
+- `src/controllers/availability.controller.js`: thin handlers (`201` create, `200` list, `204` delete).
+- `src/validators/availability.validator.js`: `YYYY-MM-DD` real-calendar-date parsing to UTC-midnight `Date` (same convention as patient `dateOfBirth`), strict `HH:mm` 24-hour times parsed to epoch-anchored `Date`s so Prisma's TIME columns store exactly the clinic wall-clock value regardless of server timezone, cross-field `endTime > startTime` and `from <= to` refinements attached to the section schemas themselves (the validate middleware parses each request section individually, so refinements on an outer wrapper would never run).
+- Migration `20260824235847_add_availability_end_time_check`: adds `CHECK (end_time > start_time)` on `"Availability"`, validated against existing rows. PostgreSQL CHECK constraints cannot be DEFERRABLE — "deferred" refers to deferring this constraint from the foundation migration to this milestone, per docs/DATABASE.md. The constraint lives only in migration SQL because Prisma's schema language cannot express CHECKs.
+- Integration tests: `tests/availability/availability.test.js` — creation happy path with exact persistence assertions, 401/403 role matrix, invalid date/time/range 400s, forged client `doctorId` ignored, the full five-case overlap matrix against an existing 09:00–10:00 slot plus same-doctor/same-date scoping probes, public listing (AVAILABLE-only, ordering, inclusive `from`/`to` combinations, empty results, 400/404 paths), deletion (own 204, foreign 403, booked 409, missing 404), and direct-to-database checks that the constraint exists and rejects inverted/equal intervals even when validation and service layers are bypassed.
+
+**Ownership:** availability is always resolved through `req.user` → `doctorRepo.findByUserId(req.user.id)` → their own Doctor row; no route accepts a doctor id for writes, so creating or deleting another doctor's slot is unreachable by construction (and the delete path additionally verifies `slot.doctor_id === doctor.id`, returning 403).
+
 **Engineering concepts learned**
 - Service-level conflict detection against database constraints
 - Timezone-bound date/time handling
@@ -430,10 +443,10 @@ Doctors define individual bookable slots; patients can view a doctor's open slot
 - Querying ranges (`from`/`to`) with Prisma
 
 **Acceptance criteria**
-- Overlapping slots return 409; adjacent slots are allowed
-- A doctor cannot delete another doctor's slot (403) or a booked slot (409)
-- `end_time > start_time` is rejected at validation, and the DB CHECK constraint exists in a migration
-- Only `AVAILABLE` slots appear in public listings
+- ✅ Overlapping slots return 409; adjacent slots are allowed
+- ✅ A doctor cannot delete another doctor's slot (403) or a booked slot (409)
+- ✅ `end_time > start_time` is rejected at validation, and the DB CHECK constraint exists in a migration
+- ✅ Only `AVAILABLE` slots appear in public listings
 
 ---
 
@@ -547,7 +560,7 @@ Make the app safe and deployable beyond localhost.
 
 # Overall Project Progress
 
-**Completed milestones (11):**
+**Completed milestones (12):**
 1. Project Foundation & Tooling
 2. Database Design & Prisma Setup
 3. Layered Architecture & Project Structure
@@ -558,17 +571,17 @@ Make the app safe and deployable beyond localhost.
 9. Specialties Module
 10. Doctors Module
 11. Patients Module
+12. Availability & Scheduling
 (plus the B9 toolchain fix, which closed Milestone 2's last open item)
 
 **Partially completed (1):**
-6. Authorization Layer — middleware done (and unit-tested); applied to specialties/doctors/patients admin routes so far, to be verified against the full matrix once all features exist
+6. Authorization Layer — middleware done (and unit-tested); applied to specialties admin routes, `PATCH /doctors/me`, `PATCH /patients/me`, and the availability write routes so far, to be verified against the full matrix once all features exist
 
-**Current milestone:** Milestone 11 — Patients Module ✅ Completed (`PATCH /patients/me` self-service profile updates with transactional User+Patient writes, and the merged `GET /users/me` endpoint owning the decision deferred from Milestone 10).
+**Current milestone:** Milestone 12 — Availability & Scheduling ✅ Completed (`GET /doctors/:doctorId/availability` public AVAILABLE-only listings with inclusive date-range filters, doctor-owned slot creation with service-level overlap detection, and ownership/status-guarded deletion — backed by the deferred `CHECK (end_time > start_time)` migration).
 
-**Next milestone (recommended):** Milestone 12 — Availability & Scheduling.
+**Next milestone (recommended):** Milestone 13 — Appointments & Booking.
 
-**Remaining major milestones (11 completed, 5 remaining):**
-12. Availability & Scheduling
+**Remaining major milestones (12 completed, 4 remaining):**
 13. Appointments & Booking
 14. Admin Module
 15. API Documentation (Swagger)
@@ -578,14 +591,14 @@ Make the app safe and deployable beyond localhost.
 
 # Recommended Next Step
 
-**Work on Milestone 12 — Availability & Scheduling next.**
+**Work on Milestone 13 — Appointments & Booking next.**
 
 Why:
 
-1. **Milestones 7 and 8 are complete.** The auth system is hardened (rate limiting, rotation with reuse detection, lockout) and locked in by a deterministic integration test suite (`npm test`) covering register → login → refresh → logout, lockout/unlock, and the concurrent-refresh race.
-2. **Every future feature builds on the auth system.** Milestones 9–14 all assume the token lifecycle and role middleware are trustworthy. With the suite in place, any regression in that foundation fails loudly before features ship. The README lists "basic CI (lint + test)" as the planned follow-up; `npm test` is ready to be wired into CI as-is.
-3. **The first three features are done.** Specialties, Doctors, and Patients exercise every layer and both ownership patterns (`req.user` → profile row), so Milestone 12 can build doctor-owned sub-resources on proven conventions — including the deferred `CHECK (end_time > start_time)` migration.
+1. **Availability now exists.** Milestone 12 delivered bookable `AVAILABLE` slots with overlap prevention and the database CHECK invariant, so the booking flow has real slots to consume.
+2. **The auth foundation is hardened and tested.** Rate limiting, rotation with reuse detection, and lockout are covered by the integration suite, so appointment flows can rely on it.
+3. **Every ownership pattern is proven.** Specialties, Doctors, Patients, and Availability exercise role checks, `req.user` → profile-row resolution, and sub-resource ownership — the exact patterns the booking/cancellation transactions need next (plus the deferred partial unique index on non-cancelled appointments).
 
 ---
 
-*This document is a roadmap only. It describes planned engineering work; none of it has been implemented as part of writing this file.*
+*This document tracks both the roadmap and the implementation state of each milestone; completed sections above describe shipped work.*

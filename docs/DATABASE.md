@@ -6,7 +6,7 @@ The schema is a normalized relational model with six PostgreSQL tables: `"User"`
 
 The relationship between `"Availability"` and `"Appointment"` is the core of the design. An appointment cannot exist without consuming a specific slot. A slot may have several historical appointments after cancellations, but PostgreSQL permits only one non-`CANCELLED` appointment for it at a time. That partial unique index is the database-level double-booking safeguard.
 
-> Implementation status: the foundation migration currently has a simple unique constraint on `"Appointment"."availability_id"`. It will be replaced in the appointment milestone by the partial unique index described here, so cancellation can release a slot while appointment history remains intact. The availability `end_time > start_time` check is likewise added in the availability milestone.
+> Implementation status: the foundation migration currently has a simple unique constraint on `"Appointment"."availability_id"`. It will be replaced in the appointment milestone by the partial unique index described here, so cancellation can release a slot while appointment history remains intact. The availability `end_time > start_time` check has been added in the availability milestone (migration `20260824235847_add_availability_end_time_check`).
 
 ## Tables
 
@@ -127,7 +127,7 @@ Availability (1) → (many) Appointment (history; at most one non-cancelled)
 - `"Doctor".specialty_id` — NOT NULL, FK → `"Specialty".id`
 - `"Specialty".name` — UNIQUE, NOT NULL
 - `"Availability".doctor_id` — NOT NULL, FK → `"Doctor".id`
-- `"Availability"` — `CHECK (end_time > start_time)`, added with availability work; request and service validation enforce the same rule.
+- `"Availability"` — `CHECK (end_time > start_time)`, added by the availability milestone migration (`20260824235847_add_availability_end_time_check`); request and service validation enforce the same rule. The constraint is a plain PostgreSQL `CHECK`, evaluated per row on every write — PostgreSQL does not support `DEFERRABLE` check constraints (deferral applies only to foreign-key, unique, and exclusion constraints), and none is needed for this invariant.
 - `"Appointment".availability_id` — NOT NULL FK → `"Availability".id`; a PostgreSQL partial unique index permits only one row per availability where `status <> 'CANCELLED'`.
 - `"Appointment".doctor_id` — NOT NULL, FK → `"Doctor".id`
 - `"Appointment".patient_id` — NOT NULL, FK → `"Patient".id`
@@ -137,7 +137,7 @@ Availability (1) → (many) Appointment (history; at most one non-cancelled)
 - `"User"(email)` — backs login lookups (also enforced by the UNIQUE constraint).
 - `"RefreshToken"(user_id)` — backs "revoke all tokens for a user" on deactivation.
 - `"RefreshToken"(family_id)` — backs family revocation on token reuse and logout.
-- `"Availability"(doctor_id, date)` — supports the frequent "get a doctor's slots for a date range" query.
+- `"Availability"(doctor_id, date)` — supports the frequent "get a doctor's slots for a date range" query and the same-doctor/same-date overlap probe.
 - `"Appointment"(patient_id)` — supports "get my appointments" for patients.
 - `"Appointment"(doctor_id)` — supports "get my appointments" for doctors.
 - Partial unique `"Appointment"(availability_id) WHERE status <> 'CANCELLED'` — prevents two active appointments for one slot while preserving cancelled history.
@@ -224,7 +224,7 @@ Each table above maps directly to a Prisma model, with the enums defined as Pris
 
 The booking operation — atomically claiming an `AVAILABLE` slot, creating the appointment, and flipping the slot to `BOOKED` — needs a Prisma `$transaction`. The partial unique index remains the database backstop if requests race. Cancellation (setting the appointment to `CANCELLED` and releasing the slot) uses the same pattern. Everything else in the API is simple enough not to need explicit transactions.
 
-The repository already contains `prisma/schema.prisma` and the foundation migration. It will be updated by later, focused migrations as availability and appointment work is implemented.
+The repository already contains `prisma/schema.prisma` and the foundation migration. It will be updated by later, focused migrations as availability and appointment work is implemented. Prisma's schema language cannot express CHECK constraints (or partial unique indexes), so the `Availability` end-time check — like the upcoming appointment index — lives intentionally as raw SQL inside its migration.
 
 ## Important Database Decisions
 
