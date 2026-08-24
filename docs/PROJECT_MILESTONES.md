@@ -14,9 +14,9 @@ This roadmap is derived from the actual repository state: the code in `src/`, th
 | 6 | Authorization Layer | 🟡 Partially completed |
 | 7 | Authentication Hardening | ✅ Completed |
 | 8 | Testing (Auth Focus) | ✅ Completed |
-| 9 | Specialties Module (First Feature) | 🟡 In progress |
+| 9 | Specialties Module (First Feature) | ✅ Completed |
 | 10 | Doctors Module | ✅ Completed |
-| 11 | Patients Module | ⬜ Not started |
+| 11 | Patients Module | ✅ Completed |
 | 12 | Availability & Scheduling | ⬜ Not started |
 | 13 | Appointments & Booking | ⬜ Not started |
 | 14 | Admin Module | ⬜ Not started |
@@ -203,7 +203,7 @@ Role-based access control (PATIENT / DOCTOR / ADMIN) enforced by middleware, wit
 - Verify the full authorization matrix from `docs/API.md` once all features exist
 
 **Current state**
-The middleware exists and is correct (`src/middlewares/role.middleware.js`, now named `requireRole` and calling `next()` on success). It is not yet applied anywhere — `app.js` mounts only `healthCheck` and `auth` routers, and `logout` is the only route using `authenticate`. The authorization matrix becomes meaningful as feature milestones 9–14 land.
+The middleware exists and is correct (`src/middlewares/role.middleware.js`, named `requireRole` and calling `next()` on success). It is now applied on every feature route built since: specialties admin endpoints, `PATCH /doctors/me`, and `PATCH /patients/me` all compose `authenticate` → `requireRole(...)`, and ownership checks live in their services. What remains is verifying the complete authorization matrix from `docs/API.md` once features 12–14 exist.
 
 **Engineering concepts learned**
 - Middleware composition (auth then authorization)
@@ -288,7 +288,7 @@ Lock in the authentication system with automated integration tests before buildi
 
 ## Milestone 9 — Specialties Module (First Feature)
 
-**Status:** 🟡 In progress
+**Status:** ✅ Completed
 
 **Goal**
 The first complete feature end-to-end — a small admin-managed lookup table that exercises every layer and the authorization middleware for the first time.
@@ -302,17 +302,19 @@ The first complete feature end-to-end — a small admin-managed lookup table tha
 - `specialty.repository.js` additions: `findAll` (paginated), `findByName`, `update`, `remove`
 
 **Current state**
-In progress — the service, repository, and controller layers are implemented; routes and tests are not yet.
+Complete. Implemented end-to-end; the "what remains" items below were closed by the specialties routes/tests commit:
 
 - `src/repositories/specialty.repository.js`: `findById`, `findByName`, `findAll` (pagination + optional case-insensitive `contains` name search shared by `findMany` and `count`, ordered by `name` ascending), `createSpecialty`, `updateSpecialty(id, data)`, `deleteSpecialty(id)` — all transaction-friendly via the `(arg, client = prisma)` pattern.
 - `src/services/specialties.service.js`: `list` (returns `{ specialties, total, meta }` with `page`/`limit`/`total`/`totalPages`), `create` (duplicate-name check → 409 `"Specialty with this name already exists"`), `update` (404 when missing; renaming to its own current name succeeds; a name owned by a different specialty → 409), `getById` (specialty or 404), `remove` (404 when missing; 409 while doctors are still assigned).
 - `src/controllers/specialties.controller.js`: thin handlers for all five operations (`201` create, `200` list/update/get, `204` delete, errors forwarded to the centralized handler).
+- `src/routes/specialty.routes.js`: `GET /specialties` and `GET /specialties/:id` public (validator only); `POST /specialties`, `PATCH /specialties/:id`, `DELETE /specialties/:id` wired `authenticate` → `requireRole('ADMIN')` → `validate(schema)`. Mounted in `app.js`.
 - Error middleware: `P2003` → 409 added alongside the existing `P2002` → 409 and `P2025` → 404 mappings, so both race backstops (unique name, FK on delete) resolve to 409.
+- Integration tests: `tests/specialties/specialties.test.js` (anonymous list with pagination/search semantics, detail + 404/400, ADMIN create with duplicate 409/validation 400s, rename incl. self-rename and 409/404 paths, delete-in-use 409, full 401/403 role matrix).
 
 The implementation adds `GET /specialties/:id` (public) beyond the four originally planned endpoints; `docs/API.md` documents it.
 
 **What remains**
-`src/routes/specialties.routes.js` with `authenticate` → `requireRole('ADMIN')` → `validate(schema)` wiring for the admin endpoints, mounting in `app.js` (until then no specialty endpoint is reachable over HTTP), and the integration test suite. Acceptance criteria are not yet met.
+None — acceptance criteria are met.
 
 **Engineering concepts learned**
 - Building a complete vertical slice through all layers
@@ -370,7 +372,7 @@ Complete. Implemented end-to-end following the specialties pattern:
 
 ## Milestone 11 — Patients Module
 
-**Status:** ⬜ Not started
+**Status:** ✅ Completed
 
 **Goal**
 Patient self-service profile management and the merged `/users/me` endpoint.
@@ -381,13 +383,27 @@ Patient self-service profile management and the merged `/users/me` endpoint.
 - Repository additions for `patient.update` and user-with-profile lookup
 - Validation for the date-of-birth field (date parsing/format)
 
+**Current state**
+Complete. Implemented end-to-end following the doctors pattern:
+
+- `src/routes/patients.routes.js`: `PATCH /patients/me` wired `authenticate` → `requireRole('PATIENT')` → `validate(updatePatientSchema)`. `src/routes/users.routes.js`: `GET /users/me` wired with `authenticate` only (any role). Both mounted in `app.js`.
+- `src/repositories/patient.repository.js`: added `findByUserId` (ownership resolution) and `update`. `src/repositories/user.repository.js`: added `findByIdWithProfile` — one query returning only owner-safe account fields plus the Doctor row (with specialty id/name) and/or Patient row.
+- Field placement per schema: `fullName`/`phone` live on `"User"`, `dateOfBirth` on `"Patient"`. The service writes both through one nested Prisma update (`patient.update { data: { date_of_birth, user: { update } } }`), which is transactional, so the account and profile can never be half-updated. Omitted fields are untouched; an empty body is a valid no-op.
+- `src/services/patients.service.js`: `updateOwnProfile(userId, {...})` resolves the Patient via `findByUserId(req.user.id)` and throws 404 `Patient not found` when the profile row is missing. `src/services/users.service.js`: `getCurrentUser(userId)` plus the shared `mapMergedProfile` mapper used by both endpoints, so `/patients/me` responses and `/users/me` responses speak one shape: account fields (`id, email, fullName, phone, role, isActive, createdAt, updatedAt`) + `patient: { id, dateOfBirth }` for PATIENT, `doctor: { id, specialty: { id, name }, bio }` for DOCTOR, no profile key for ADMIN. A role whose profile row is missing surfaces as 404; sensitive fields (password hash, lockout state, tokens) never leave the repository select.
+- `src/validators/patient.validator.js`: optional trimmed non-empty `fullName` ≤ 150, trimmed `phone` ≤ 30 (mirrors registration), and a date-only `dateOfBirth`: strictly `YYYY-MM-DD`, must parse to a real calendar date (rejects `1990-02-30`), transformed to a UTC-midnight `Date` at the boundary so the `@db.Date` column stores exactly that calendar day regardless of server timezone; serialized back out as `YYYY-MM-DD`.
+- Integration tests: `tests/patients/patients.test.js` (self-update persistence across User+Patient, partial updates, empty-body no-op, exact calendar-date persistence without timezone drift, malformed dates/values 400s, unknown-field stripping, 401/403 role matrix, cross-patient ownership + forged-id route absence, missing-profile 404s, `/users/me` per-role shapes, sensitive-field leak scan, PATCH/GET shape agreement).
+
+**Ownership:** `PATCH /patients/me` resolves the Patient row via `patientRepo.findByUserId(req.user.id)` — the id comes from the verified token (and the DB-active recheck in `authenticate`), never from client input. There is no route accepting a patient id for updates, so another patient's profile is unreachable by construction.
+
 **Engineering concepts learned**
-- Merging base account data with role-specific profile data
+- Merging base account data with role-specific profile data in one response shape
 - Same "own profile" ownership pattern as doctors, applied to patients
+- Nested Prisma writes as an implicit transaction across User + Patient rows
+- Date-only validation and timezone-safe storage (`YYYY-MM-DD` ↔ UTC-midnight `Date` ↔ Postgres `DATE`)
 
 **Acceptance criteria**
-- A PATIENT updates only their own profile; other roles get 403
-- `GET /users/me` returns role-appropriate profile fields
+- ✅ A PATIENT updates only their own profile; other roles get 403
+- ✅ `GET /users/me` returns role-appropriate profile fields
 
 ---
 
@@ -531,7 +547,7 @@ Make the app safe and deployable beyond localhost.
 
 # Overall Project Progress
 
-**Completed milestones (8):**
+**Completed milestones (11):**
 1. Project Foundation & Tooling
 2. Database Design & Prisma Setup
 3. Layered Architecture & Project Structure
@@ -539,19 +555,19 @@ Make the app safe and deployable beyond localhost.
 5. Authentication & Session Management
 7. Authentication Hardening
 8. Testing (Auth Focus)
-(plus the B9 toolchain fix, which closed Milestone 2's last open item)
-
-**Partially completed (1):**
-6. Authorization Layer — middleware done (and unit-tested), not yet applied to any route
-
-**Current milestone:** Milestone 10 — Doctors Module ✅ Completed (public directory with specialty name/id filtering, public detail, DOCTOR self-service profile updates; `/users/me` deferred to Milestone 11 — see the decision note above).
-
-**Next milestone (recommended):** Milestone 11 — Patients Module.
-
-**Remaining major milestones (8 completed, 7 remaining):**
 9. Specialties Module
 10. Doctors Module
 11. Patients Module
+(plus the B9 toolchain fix, which closed Milestone 2's last open item)
+
+**Partially completed (1):**
+6. Authorization Layer — middleware done (and unit-tested); applied to specialties/doctors/patients admin routes so far, to be verified against the full matrix once all features exist
+
+**Current milestone:** Milestone 11 — Patients Module ✅ Completed (`PATCH /patients/me` self-service profile updates with transactional User+Patient writes, and the merged `GET /users/me` endpoint owning the decision deferred from Milestone 10).
+
+**Next milestone (recommended):** Milestone 12 — Availability & Scheduling.
+
+**Remaining major milestones (11 completed, 5 remaining):**
 12. Availability & Scheduling
 13. Appointments & Booking
 14. Admin Module
@@ -562,14 +578,13 @@ Make the app safe and deployable beyond localhost.
 
 # Recommended Next Step
 
-**Work on Milestone 9 — Specialties next.**
+**Work on Milestone 12 — Availability & Scheduling next.**
 
 Why:
 
 1. **Milestones 7 and 8 are complete.** The auth system is hardened (rate limiting, rotation with reuse detection, lockout) and locked in by a deterministic integration test suite (`npm test`) covering register → login → refresh → logout, lockout/unlock, and the concurrent-refresh race.
 2. **Every future feature builds on the auth system.** Milestones 9–14 all assume the token lifecycle and role middleware are trustworthy. With the suite in place, any regression in that foundation fails loudly before features ship. The README lists "basic CI (lint + test)" as the planned follow-up; `npm test` is ready to be wired into CI as-is.
-
-After 8, build **Milestone 9 — Specialties** as the first complete feature: it is the smallest vertical slice, exercises `requireRole('ADMIN')` for the first time, and its validator is already drafted in `src/validators/specialty.validator.js`.
+3. **The first three features are done.** Specialties, Doctors, and Patients exercise every layer and both ownership patterns (`req.user` → profile row), so Milestone 12 can build doctor-owned sub-resources on proven conventions — including the deferred `CHECK (end_time > start_time)` migration.
 
 ---
 

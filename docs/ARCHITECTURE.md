@@ -178,6 +178,7 @@ src/
 │   ├── availability.routes.js
 │   ├── appointments.routes.js
 │   ├── admin.routes.js
+│   ├── users.routes.js
 │   └── index.js
 ├── controllers/
 │   ├── auth.controller.js
@@ -186,7 +187,8 @@ src/
 │   ├── specialties.controller.js
 │   ├── availability.controller.js
 │   ├── appointments.controller.js
-│   └── admin.controller.js
+│   ├── admin.controller.js
+│   └── users.controller.js
 ├── services/
 │   ├── auth.service.js
 │   ├── doctors.service.js
@@ -194,7 +196,8 @@ src/
 │   ├── specialties.service.js
 │   ├── availability.service.js
 │   ├── appointments.service.js
-│   └── admin.service.js
+│   ├── admin.service.js
+│   └── users.service.js
 ├── repositories/
 │   ├── user.repository.js
 │   ├── refresh-token.repository.js
@@ -206,6 +209,7 @@ src/
 ├── validators/
 │   ├── auth.validator.js
 │   ├── doctor.validator.js
+│   ├── patient.validator.js
 │   ├── availability.validator.js
 │   └── appointment.validator.js
 ├── errors/

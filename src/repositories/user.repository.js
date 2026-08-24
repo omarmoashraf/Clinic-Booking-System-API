@@ -16,6 +16,47 @@ export const findUserById = (id, client = prisma) => {
   return client.user.findUnique({ where: { id } });
 };
 
+// Only account fields that are safe to expose to the account owner.
+// Sensitive auth state (password hash, lockout counters) never leaves
+// the repository for profile lookups.
+const safeUserSelect = {
+  id: true,
+  email: true,
+  full_name: true,
+  phone: true,
+  role: true,
+  is_active: true,
+  created_at: true,
+  updated_at: true,
+};
+
+/**
+ * Find a user together with their role-specific profile in one query:
+ * the Doctor row (with its specialty id/name) and/or the Patient row.
+ * Used by GET /users/me. Admins have neither relation (both come back null).
+ */
+export const findByIdWithProfile = (id, client = prisma) => {
+  return client.user.findUnique({
+    where: { id },
+    select: {
+      ...safeUserSelect,
+      doctor: {
+        select: {
+          id: true,
+          bio: true,
+          specialty: { select: { id: true, name: true } },
+        },
+      },
+      patient: {
+        select: {
+          id: true,
+          date_of_birth: true,
+        },
+      },
+    },
+  });
+};
+
 /**
  * Create a user account.
  * Used by registration.
@@ -42,7 +83,7 @@ const buildUserFilter = ({ role, isActive }) => ({
  * Used by admin user management. Defaults and limit cap follow docs/API.md.
  */
 export const findUsers = ({ page = 1, limit = 10, role, isActive } = {}, client = prisma) => {
-  const take = Math.min(limit, 50);
+  const take = Math.min(limit, 100);
   const skip = (page - 1) * take;
 
   return client.user.findMany({

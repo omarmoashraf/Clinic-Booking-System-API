@@ -208,9 +208,38 @@ Errors: `401` missing/invalid access token, or the refresh token does not belong
 
 Authentication: Required (any role)
 
-Purpose: Return the authenticated user merged with their doctor or patient profile.
+Purpose: Return the authenticated user merged with their role-specific profile. The profile is resolved from the token's user id — never from client input.
 
-Response `200`: user + role-specific profile fields.
+Response `200`:
+
+```json
+{
+  "status": "success",
+  "data": {
+    "id": "uuid",
+    "email": "patient@example.com",
+    "fullName": "Jane Doe",
+    "phone": "+201000000000",
+    "role": "PATIENT",
+    "isActive": true,
+    "createdAt": "timestamp",
+    "updatedAt": "timestamp",
+    "patient": { "id": "uuid", "dateOfBirth": "1995-06-15" }
+  }
+}
+```
+
+The account fields (`id`, `email`, `fullName`, `phone`, `role`, `isActive`, `createdAt`, `updatedAt`) are always present. The role-specific profile is keyed exactly like the database relation:
+
+* `PATIENT` → `"patient": { id, dateOfBirth }`
+* `DOCTOR` → `"doctor": { id, specialty: { id, name }, bio }`
+* `ADMIN` has no role profile, so neither key is present.
+
+A `PATIENT` never receives doctor data and vice versa. The response never includes the password hash, lockout state (`failed_login_count`, `locked_until`), or any token material.
+
+`dateOfBirth` is a date-only value serialized as `YYYY-MM-DD`.
+
+Errors: `401` missing/invalid access token or deactivated account, `404` the authenticated user's role profile row is missing (integrity error).
 
 ---
 
@@ -271,9 +300,24 @@ Errors: `401` unauthenticated, `403` non-DOCTOR, `400` validation failure, `404`
 
 Authentication: Required — Role: PATIENT
 
-Validation: `fullName` (optional string), `phone` (optional string), `dateOfBirth` (optional date)
+Validation: `fullName` (optional string, trimmed, non-empty, max 150 chars), `phone` (optional string, trimmed, max 30 chars), `dateOfBirth` (optional date-only string, exactly `YYYY-MM-DD`, must be a real calendar date).
 
-Errors: `400` validation failure.
+This is a partial update: only supplied fields change; omitted fields keep their current values. Unknown fields are ignored. An empty body is a valid no-op returning the current profile.
+
+`fullName` and `phone` live on the account (`"User"`) row while `dateOfBirth` lives on the `"Patient"` profile row; both are written together atomically. The patient being updated is always resolved from the authenticated user (`req.user` → their own `Patient` row); there is no client-supplied patient id on this endpoint, so a patient cannot modify another patient's profile.
+
+Request:
+```json
+{
+  "fullName": "Jane Doe",
+  "phone": "+201000000000",
+  "dateOfBirth": "1995-06-15"
+}
+```
+
+Response `200`: the updated merged profile in the same shape as `GET /users/me` for a PATIENT (account fields plus `"patient": { id, dateOfBirth }`). `dateOfBirth` is returned as `YYYY-MM-DD`.
+
+Errors: `401` unauthenticated, `403` non-PATIENT (DOCTOR/ADMIN), `400` validation failure, `404` the authenticated PATIENT has no Patient profile row (integrity error).
 
 ---
 

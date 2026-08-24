@@ -8,6 +8,8 @@ import healthRouter from './routes/healthCheck.js';
 import authRouter from './routes/auth.routes.js';
 import specialtyRouter from './routes/specialty.routes.js'
 import doctorsRouter from './routes/doctors.routes.js';
+import patientsRouter from './routes/patients.routes.js';
+import usersRouter from './routes/users.routes.js';
 
 const app = express();
 
@@ -21,6 +23,8 @@ app.use('/api/v1', healthRouter);
 app.use('/api/v1/auth', authRouter);
 app.use('/api/v1' , specialtyRouter);
 app.use('/api/v1', doctorsRouter);
+app.use('/api/v1', patientsRouter);
+app.use('/api/v1', usersRouter);
 
 // 404 handler for undefined routes
 app.use((req, res, next) => {
