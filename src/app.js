@@ -11,6 +11,7 @@ import doctorsRouter from './routes/doctors.routes.js';
 import patientsRouter from './routes/patients.routes.js';
 import usersRouter from './routes/users.routes.js';
 import availabilityRouter from './routes/availability.routes.js';
+import appointmentsRouter from './routes/appointments.routes.js';
 
 const app = express();
 
@@ -27,6 +28,7 @@ app.use('/api/v1', doctorsRouter);
 app.use('/api/v1', patientsRouter);
 app.use('/api/v1', usersRouter);
 app.use('/api/v1', availabilityRouter);
+app.use('/api/v1', appointmentsRouter);
 
 // 404 handler for undefined routes
 app.use((req, res, next) => {

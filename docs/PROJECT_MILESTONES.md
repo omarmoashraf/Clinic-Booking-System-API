@@ -18,7 +18,7 @@ This roadmap is derived from the actual repository state: the code in `src/`, th
 | 10 | Doctors Module | ✅ Completed |
 | 11 | Patients Module | ✅ Completed |
 | 12 | Availability & Scheduling | ✅ Completed |
-| 13 | Appointments & Booking | ⬜ Not started |
+| 13 | Appointments & Booking | ✅ Completed |
 | 14 | Admin Module | ⬜ Not started |
 | 15 | API Documentation (Swagger) | ⬜ Not started |
 | 16 | Security Hardening & Production Readiness | ⬜ Not started |
@@ -452,7 +452,7 @@ Complete. Implemented end-to-end following the doctors/patients pattern:
 
 ## Milestone 13 — Appointments & Booking
 
-**Status:** ⬜ Not started
+**Status:** ✅ Completed
 
 **Goal**
 The core business flow: patients book available slots, cancel their own appointments, and doctors manage appointment status — with double-booking prevented at the database level.
@@ -466,17 +466,29 @@ The core business flow: patients book available slots, cancel their own appointm
 - Cancellation: set status `CANCELLED` + release the slot back to `AVAILABLE` in the same transaction
 - The partial unique index is the DB backstop if booking requests race
 
+**Current state**
+Complete. Implemented end-to-end following the established feature pattern:
+
+- Migration `20260825094959_appointment_partial_unique_index`: drops `Appointment_availability_id_key` and creates the partial unique index `Appointment_active_availability_key ON "Appointment"("availability_id") WHERE status <> 'CANCELLED'`. Prisma's schema language cannot express partial indexes, so the index lives intentionally as raw SQL (same precedent as the M12 CHECK constraint); `schema.prisma` drops `@unique` from `availability_id` and makes the back-relation a list (`Availability.appointments Appointment[]`).
+- `src/repositories/appointment.repository.js`: `findById` (with response relations only — patient/doctor names, specialty, slot wall-clock values), `findMany` (ownership + optional status filtering, pagination and count entirely in SQL, ordered by slot date then start time), `create`, and `updateStatusIfCurrent` (conditional `updateMany` used as a compare-and-set transition guard). `src/repositories/availability.repository.js` adds `claimAvailableSlot` (conditional `UPDATE … WHERE status = 'AVAILABLE'`) and `releaseBookedSlot` (guarded by "no other non-cancelled appointment references this slot").
+- `src/services/appointments.service.js`: `book` (patient resolved from `req.user`; one interactive `$transaction` claiming the slot then inserting the PENDING appointment; a lost claim race surfaces as 409 `"Appointment slot is already booked"`, and the P2002 unique-index backstop maps to the same friendly conflict), `listMine` (role-resolved ownership filter applied by the database query), `getById` (404 vs 403 distinction, ADMIN unrestricted), and `updateStatus` (state machine `PENDING→CONFIRMED|CANCELLED`, `CONFIRMED→COMPLETED|CANCELLED` with terminal states; patients may only cancel — confirm/complete attempts are 403; past-appointment immutability computed in clinic time via `src/utils/clinic-time.js` with the documented exception of the owning doctor marking a past CONFIRMED appointment COMPLETED; cancellation cancels conditionally and releases the guarded slot in one transaction).
+- `src/controllers/appointments.controller.js` + `src/routes/appointments.routes.js`: thin handlers; routes wired `authenticate` → `requireRole(...)` → `validate(schema)` (`POST /appointments` PATIENT; `/me` PATIENT+DOCTOR registered before `/:id`; PATCH status PATIENT+DOCTOR — ADMIN keeps read-only access per the matrix). Mounted in `app.js`.
+- `src/validators/appointment.validator.js`: UUID params, `availabilityId` UUID + trimmed ≤1000-char optional notes, pagination defaults 1/10 capped at 100, closed status enums (structural validity only — transition legality stays in the service).
+- Integration tests: `tests/appointments/appointments.test.js` — booking happy path with exact persistence assertions, role matrix (401/403/400/404), forged client `patientId`/`doctorId`/`status` ignored, booked-slot 409, a true concurrent double-booking test (`Promise.all` of two live HTTP requests → exactly one 201 + one 409 and exactly one surviving row), patient/doctor listing scoping + pagination + status filters, detail-view ownership matrix, all four valid transitions, five invalid transitions at 409, cancellation releasing the slot atomically for both roles, rebooking-after-cancellation with retained history, past-appointment rules (doctor completion exception allowed; everything else 409) using Africa/Cairo-derived ±3-day dates, plus direct-to-database checks that the partial index exists with its WHERE clause, rejects two active appointments when services are bypassed, and tolerates cancelled history beside an active row.
+
 **Engineering concepts learned**
 - Transactional state changes spanning two tables (slot + appointment)
 - Database-level race protection (partial unique index) vs. app-level checks
+- Conditional updates as compare-and-set guards under READ COMMITTED
 - Status-lifecycle state machines and their validation
 - History retention vs. reusability (cancelled rows stay, slots reopen)
+- Clinic-timezone instant resolution for "past" semantics (DST-aware)
 
 **Acceptance criteria**
-- Two concurrent bookings of the same slot result in exactly one success
-- Cancelling releases the slot; the same slot can be booked again later
-- Invalid transitions (e.g. cancelling a COMPLETED appointment) return 409
-- A patient sees only their own appointments; a doctor only theirs; ADMIN sees all
+- ✅ Two concurrent bookings of the same slot result in exactly one success
+- ✅ Cancelling releases the slot; the same slot can be booked again later
+- ✅ Invalid transitions (e.g. cancelling a COMPLETED appointment) return 409
+- ✅ A patient sees only their own appointments; a doctor only theirs; ADMIN sees all
 
 ---
 
@@ -560,7 +572,7 @@ Make the app safe and deployable beyond localhost.
 
 # Overall Project Progress
 
-**Completed milestones (12):**
+**Completed milestones (13):**
 1. Project Foundation & Tooling
 2. Database Design & Prisma Setup
 3. Layered Architecture & Project Structure
@@ -572,17 +584,17 @@ Make the app safe and deployable beyond localhost.
 10. Doctors Module
 11. Patients Module
 12. Availability & Scheduling
+13. Appointments & Booking
 (plus the B9 toolchain fix, which closed Milestone 2's last open item)
 
 **Partially completed (1):**
-6. Authorization Layer — middleware done (and unit-tested); applied to specialties admin routes, `PATCH /doctors/me`, `PATCH /patients/me`, and the availability write routes so far, to be verified against the full matrix once all features exist
+6. Authorization Layer — middleware done (and unit-tested); applied to specialties admin routes, `PATCH /doctors/me`, `PATCH /patients/me`, the availability write routes, and every appointments route so far, to be verified against the full matrix once the admin feature exists
 
-**Current milestone:** Milestone 12 — Availability & Scheduling ✅ Completed (`GET /doctors/:doctorId/availability` public AVAILABLE-only listings with inclusive date-range filters, doctor-owned slot creation with service-level overlap detection, and ownership/status-guarded deletion — backed by the deferred `CHECK (end_time > start_time)` migration).
+**Current milestone:** Milestone 13 — Appointments & Booking ✅ Completed (`POST /appointments` with atomic slot claiming inside one transaction, `GET /appointments/me` + `GET /appointments/:id` with database-level ownership scoping, `PATCH /appointments/:id/status` as a validated state machine with past-appointment immutability in clinic time, transactional cancellation releasing the slot, and migration `20260825094959_appointment_partial_unique_index` replacing the old unique constraint with a partial unique index on non-cancelled appointments).
 
-**Next milestone (recommended):** Milestone 13 — Appointments & Booking.
+**Next milestone (recommended):** Milestone 14 — Admin Module.
 
-**Remaining major milestones (12 completed, 4 remaining):**
-13. Appointments & Booking
+**Remaining major milestones (13 completed, 3 remaining):**
 14. Admin Module
 15. API Documentation (Swagger)
 16. Security Hardening & Production Readiness
@@ -591,13 +603,13 @@ Make the app safe and deployable beyond localhost.
 
 # Recommended Next Step
 
-**Work on Milestone 13 — Appointments & Booking next.**
+**Work on Milestone 14 — Admin Module next.**
 
 Why:
 
-1. **Availability now exists.** Milestone 12 delivered bookable `AVAILABLE` slots with overlap prevention and the database CHECK invariant, so the booking flow has real slots to consume.
-2. **The auth foundation is hardened and tested.** Rate limiting, rotation with reuse detection, and lockout are covered by the integration suite, so appointment flows can rely on it.
-3. **Every ownership pattern is proven.** Specialties, Doctors, Patients, and Availability exercise role checks, `req.user` → profile-row resolution, and sub-resource ownership — the exact patterns the booking/cancellation transactions need next (plus the deferred partial unique index on non-cancelled appointments).
+1. **The appointment data model is final.** Booking, cancellation, transitions, and the partial unique index are shipped and tested, so `GET /admin/appointments` can reuse the exact repository query patterns proven by `/appointments/me`.
+2. **Deactivation plumbing exists.** The refresh-token repository already exposes revoke-all-for-user; the admin module only needs to wire it into account deactivation.
+3. **Milestone 6 can then be closed.** With all features present, the complete authorization matrix from docs/API.md becomes verifiable end-to-end.
 
 ---
 

@@ -6,7 +6,7 @@ The schema is a normalized relational model with six PostgreSQL tables: `"User"`
 
 The relationship between `"Availability"` and `"Appointment"` is the core of the design. An appointment cannot exist without consuming a specific slot. A slot may have several historical appointments after cancellations, but PostgreSQL permits only one non-`CANCELLED` appointment for it at a time. That partial unique index is the database-level double-booking safeguard.
 
-> Implementation status: the foundation migration currently has a simple unique constraint on `"Appointment"."availability_id"`. It will be replaced in the appointment milestone by the partial unique index described here, so cancellation can release a slot while appointment history remains intact. The availability `end_time > start_time` check has been added in the availability milestone (migration `20260824235847_add_availability_end_time_check`).
+> Implementation status: the foundation migration's simple unique constraint on `"Appointment"."availability_id"` was replaced in the appointment milestone by the partial unique index described here (migration `20260825094959_appointment_partial_unique_index`), so cancellation can release a slot while appointment history remains intact. The availability `end_time > start_time` check was added in the availability milestone (migration `20260824235847_add_availability_end_time_check`).
 
 ## Tables
 
@@ -220,7 +220,7 @@ erDiagram
 
 ## Prisma Considerations
 
-Each table above maps directly to a Prisma model, with the enums defined as Prisma `enum` blocks (`Role`, `AvailabilityStatus`, `AppointmentStatus`). `Doctor.user_id` and `Patient.user_id` become `@unique` foreign keys with a `@relation` back to `User`, giving the one-to-one relationship. In the appointment milestone, `Appointment.availability_id` becomes a non-unique relation (one availability to many appointment records) and a PostgreSQL migration adds the partial unique index described above. Prisma does not express this partial index directly, so it is intentionally maintained in that migration.
+Each table above maps directly to a Prisma model, with the enums defined as Prisma `enum` blocks (`Role`, `AvailabilityStatus`, `AppointmentStatus`). `Doctor.user_id` and `Patient.user_id` become `@unique` foreign keys with a `@relation` back to `User`, giving the one-to-one relationship. In the appointment milestone, `Appointment.availability_id` became a non-unique relation (one availability to many appointment records) and migration `20260825094959_appointment_partial_unique_index` adds the partial unique index described above. Prisma does not express this partial index directly, so it is intentionally maintained in that migration.
 
 The booking operation — atomically claiming an `AVAILABLE` slot, creating the appointment, and flipping the slot to `BOOKED` — needs a Prisma `$transaction`. The partial unique index remains the database backstop if requests race. Cancellation (setting the appointment to `CANCELLED` and releasing the slot) uses the same pattern. Everything else in the API is simple enough not to need explicit transactions.
 

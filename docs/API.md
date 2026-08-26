@@ -463,44 +463,120 @@ Errors: `401` unauthenticated, `403` non-DOCTOR or the slot belongs to another d
 
 ## Appointments Module
 
+An appointment consumes exactly one availability slot. A slot can hold **one non-cancelled appointment** — enforced by a PostgreSQL partial unique index (`availability_id` where `status <> 'CANCELLED'`), so two racing booking requests can never both succeed even if they hit the server simultaneously. Cancelling retains the appointment as history (`status = CANCELLED`), releases the slot back to `AVAILABLE`, and makes it bookable again.
+
+Appointment lifecycle (a strict state machine):
+
+```text
+PENDING ──→ CONFIRMED ──→ COMPLETED
+   │             │
+   └─────────────┴──→ CANCELLED
+```
+
+Valid transitions: `PENDING → CONFIRMED`, `CONFIRMED → COMPLETED`, and `CANCELLED` reachable from `PENDING` or `CONFIRMED`. `COMPLETED` and `CANCELLED` are terminal. Invalid transitions return `409`.
+
+Past appointments (slot end time already elapsed in clinic time, `Africa/Cairo`) are immutable — no status change and no cancellation — except that the owning doctor may still mark a past **`CONFIRMED`** appointment `COMPLETED`.
+
 ### POST /appointments
 
 Authentication: Required — Role: PATIENT
 
-Validation: `availabilityId` (UUID), `notes` (optional string)
+Validation: `availabilityId` (UUID), `notes` (optional string, trimmed, max 1000 chars)
+
+The patient is always resolved from the authenticated user (`req.user` → their own `Patient` row); client-supplied `patientId`, `doctorId`, or `status` fields do not exist in the contract and are ignored. The doctor comes from the selected availability slot.
+
+Booking is atomic: the slot is conditionally claimed (`AVAILABLE → BOOKED`) and the appointment created inside one transaction. Two concurrent bookings of the same slot produce exactly one `201` and one `409`; the database partial unique index is the final backstop.
 
 Request:
 ```json
 { "availabilityId": "uuid", "notes": "First visit" }
 ```
 
-Response `201`: created appointment, status `PENDING`.
+Response `201`: the created appointment.
 
-Errors: `404` slot not found, `409` slot no longer `AVAILABLE`.
+```json
+{
+  "status": "success",
+  "data": {
+    "id": "uuid",
+    "status": "PENDING",
+    "notes": "First visit",
+    "createdAt": "timestamp",
+    "updatedAt": "timestamp",
+    "patient": { "id": "uuid", "fullName": "Jane Doe" },
+    "doctor": {
+      "id": "uuid",
+      "fullName": "Dr. Who",
+      "specialty": { "id": "uuid", "name": "Cardiology" }
+    },
+    "availability": {
+      "id": "uuid",
+      "date": "2030-09-01",
+      "startTime": "09:30",
+      "endTime": "11:00"
+    }
+  }
+}
+```
 
-An availability slot can have one non-cancelled appointment. Cancelling an appointment retains it as history, changes its status to `CANCELLED`, and releases the slot so that it may be booked again.
+Errors: `401` unauthenticated, `403` non-PATIENT, `400` validation failure, `404` the slot does not exist, `409` the slot is no longer `AVAILABLE` (`"Appointment slot is already booked"`).
 
 ### GET /appointments/me
 
 Authentication: Required — Role: PATIENT or DOCTOR
 
-Purpose: List the caller's own appointments (as patient or as doctor, depending on role).
+Purpose: List the caller's own appointments — as patient for a PATIENT, as doctor for a DOCTOR. The ownership filter is part of the database query; another user's appointments are never returned.
 
-Query params: `page`, `limit`, `status` (optional)
+Query params: `page`, `limit`, `status` (optional enum: `PENDING | CONFIRMED | COMPLETED | CANCELLED`)
+
+Response `200`: paginated appointments in the same shape as the create response above, ordered by slot date then start time.
+
+```json
+{
+  "status": "success",
+  "data": [ ... ],
+  "meta": { "page": 1, "limit": 10, "total": 42, "totalPages": 5 }
+}
+```
+
+Errors: `401` unauthenticated, `403` ADMIN or other roles, `400` invalid query parameters.
 
 ### GET /appointments/:id
 
 Authentication: Required — Role: PATIENT, DOCTOR, or ADMIN
 
-Errors: `403` doesn't belong to requester (unless ADMIN), `404` not found.
+ADMIN can view any appointment. A PATIENT sees only their own; a DOCTOR only their own. A non-owner receives `403` without any appointment data in the response.
+
+Path param: `id` (UUID).
+
+Response `200`: `{ "status": "success", "data": { ...appointment } }` in the create-response shape.
+
+Errors: `401` unauthenticated, `403` not the owner (unless ADMIN), `400` malformed UUID, `404` not found.
 
 ### PATCH /appointments/:id/status
 
-Authentication: Required — Role: DOCTOR (own appointments, any valid transition) or PATIENT (own appointments, cancel only)
+Authentication: Required — Role: DOCTOR (own appointments, any valid transition) or PATIENT (own appointments, cancel only). ADMIN is read-only for appointments.
 
-Validation: `status` (enum: `CONFIRMED` | `CANCELLED` | `COMPLETED`)
+Validation: `status` (enum: `CONFIRMED` | `CANCELLED` | `COMPLETED` — appointments start as `PENDING`, so it cannot be requested)
 
-Errors: `403` ownership/role mismatch, `409` invalid state transition (e.g. cancelling a `COMPLETED` appointment, or modifying a past appointment other than marking it `COMPLETED`).
+Rules:
+
+* A doctor manages their own appointments: confirm (`PENDING → CONFIRMED`), complete (`CONFIRMED → COMPLETED`), or cancel.
+* A patient may only cancel (`CANCELLED`) their own appointment. Attempting `CONFIRMED`/`COMPLETED` is a role violation → `403`.
+* Another user's appointment is unreachable → `403`.
+* An illegal transition (e.g. cancelling a `COMPLETED` appointment) → `409`.
+* A past appointment rejects every modification except its own doctor marking a `CONFIRMED` appointment `COMPLETED` → otherwise `409`.
+
+Cancelling atomically sets the appointment to `CANCELLED` and releases the slot back to `AVAILABLE` in the same transaction; the cancelled row is retained as history.
+
+Request:
+```json
+{ "status": "CONFIRMED" }
+```
+
+Response `200`: the updated appointment in the standard shape.
+
+Errors: `401` unauthenticated, `403` role/ownership mismatch, `400` validation failure (unknown status values), `404` appointment not found, `409` invalid transition or past-appointment modification.
 
 ---
 

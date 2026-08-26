@@ -4,7 +4,7 @@
 
 A backend application for managing clinic appointment scheduling. Patients browse doctors, check availability, and book or cancel appointments. Doctors manage their availability and the status of their appointments. Admins manage accounts and specialties. Built with Node.js, Express.js, and PostgreSQL via Prisma.
 
-> Status: Foundation complete with centralized validation and error handling; authentication hardened (registration, JWT login, rotating refresh tokens, logout, login lockout). Domain features implemented: specialties management, doctor directory and self-service profiles, patient profiles with the merged `/users/me`, and doctor-owned availability slots with overlap prevention. Appointments booking and admin management are planned but not implemented yet.
+> Status: Foundation complete with centralized validation and error handling; authentication hardened (registration, JWT login, rotating refresh tokens, logout, login lockout). Domain features implemented: specialties management, doctor directory and self-service profiles, patient profiles with the merged `/users/me`, doctor-owned availability slots with overlap prevention, and the core appointments flow — booking with atomic slot claiming, cancellation that releases slots, controlled status transitions, and double-booking prevented by a partial unique index at the database level. Admin management is planned but not implemented yet.
 
 ## Planned Features
 
@@ -37,7 +37,7 @@ A layered Express application: routes → controllers → services → repositor
 
 ## Database
 
-PostgreSQL, accessed through Prisma. The initial schema and migration use Prisma's quoted PascalCase table names (`"User"`, `"Specialty"`, `"Doctor"`, `"Patient"`, `"Availability"`, and `"Appointment"`). The final appointment design will retain cancelled history and enforce one non-cancelled appointment per slot at the database level. Full schema decisions are in [`docs/DATABASE.md`](docs/DATABASE.md).
+PostgreSQL, accessed through Prisma. The schema uses Prisma's quoted PascalCase table names (`"User"`, `"Specialty"`, `"Doctor"`, `"Patient"`, `"Availability"`, and `"Appointment"`). Cancelled appointments are retained as history, and a PostgreSQL partial unique index enforces one non-cancelled appointment per availability slot at the database level. Full schema decisions are in [`docs/DATABASE.md`](docs/DATABASE.md).
 
 ## API Documentation
 
@@ -61,6 +61,11 @@ src/
 tests/
 ├── helpers/       # test DB setup + auth request helpers
 ├── auth/          # integration tests for the auth endpoints
+├── specialties/   # integration tests for the specialties endpoints
+├── doctors/       # integration tests for the doctors endpoints
+├── patients/      # integration tests for the patients endpoints
+├── availability/  # integration tests for the availability endpoints
+├── appointments/  # integration tests for booking, status, and concurrency
 └── middleware/    # authenticate / role middleware tests
 ```
 

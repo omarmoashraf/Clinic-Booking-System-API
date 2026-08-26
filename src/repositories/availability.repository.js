@@ -55,3 +55,39 @@ export const createAvailability = (data, client = prisma) => {
 export const deleteAvailability = (id, client = prisma) => {
   return client.availability.delete({ where: { id } });
 };
+
+/**
+ * Atomically claim an AVAILABLE slot for booking: the UPDATE only matches
+ * while the status is still AVAILABLE and takes a row lock, so of two
+ * concurrent booking transactions exactly one updates the row — the other
+ * blocks, re-evaluates the predicate against the committed row, and updates
+ * zero rows. A zero count is the caller's signal to fail with 409.
+ */
+export const claimAvailableSlot = (id, client = prisma) => {
+  return client.availability.updateMany({
+    where: { id, status: 'AVAILABLE' },
+    data: { status: 'BOOKED' },
+  });
+};
+
+/**
+ * Release a booked slot after cancellation. The guard refuses to release
+ * when any OTHER non-cancelled appointment already references the slot, so
+ * a release that races with a concurrent re-booking can never flip the slot
+ * back to AVAILABLE under someone else's active appointment.
+ */
+export const releaseBookedSlot = ({ availabilityId, exceptAppointmentId }, client = prisma) => {
+  return client.availability.updateMany({
+    where: {
+      id: availabilityId,
+      status: 'BOOKED',
+      appointments: {
+        none: {
+          id: { not: exceptAppointmentId },
+          status: { not: 'CANCELLED' },
+        },
+      },
+    },
+    data: { status: 'AVAILABLE' },
+  });
+};
