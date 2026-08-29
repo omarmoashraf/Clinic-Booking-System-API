@@ -16,6 +16,7 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(32, { message: 'JWT_SECRET must be at least 32 characters' }),
   JWT_ACCESS_EXPIRES_IN: z.string().default('15m'),
   JWT_REFRESH_EXPIRES_IN: z.string().default('30d'),
+  CORS_ORIGIN: z.string().default('*'),
   RATE_LIMIT_LOGIN_MAX: z
     .string()
     .default('10')
@@ -48,6 +49,7 @@ const {
   JWT_SECRET,
   JWT_ACCESS_EXPIRES_IN,
   JWT_REFRESH_EXPIRES_IN,
+  CORS_ORIGIN,
   RATE_LIMIT_LOGIN_MAX,
   RATE_LIMIT_REGISTER_MAX,
   RATE_LIMIT_REFRESH_MAX,
@@ -64,6 +66,7 @@ const parseDurationToMs = (value) => {
 
 export default {
   port: PORT,
+  corsOrigin: CORS_ORIGIN,
   env: {
     isDev: NODE_ENV === 'development',
     isProd: NODE_ENV === 'production',

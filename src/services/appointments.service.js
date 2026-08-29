@@ -30,7 +30,7 @@ const ALLOWED_TRANSITIONS = {
 const toDateOnly = (date) => date.toISOString().slice(0, 10);
 const toTimeOnly = (time) => time.toISOString().slice(11, 16);
 
-const toPublicAppointment = (appointment) => ({
+export const toPublicAppointment = (appointment) => ({
   id: appointment.id,
   status: appointment.status,
   notes: appointment.notes,

@@ -88,8 +88,10 @@ export const findUsers = ({ page = 1, limit = 10, role, isActive } = {}, client 
 
   return client.user.findMany({
     where: buildUserFilter({ role, isActive }),
+    select: safeUserSelect,
     skip,
     take,
+    orderBy: { created_at: 'desc' },
   });
 };
 
