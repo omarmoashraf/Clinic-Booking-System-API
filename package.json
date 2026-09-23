@@ -15,7 +15,8 @@
     "start": "node src/app.js",
     "test": "node --env-file=.env.test --test --test-concurrency=1",
     "test:db": "node src/test-db.js",
-    "create-admin": "node src/scripts/create-admin.js"
+    "create-admin": "node src/scripts/create-admin.js",
+    "export:docs": "node src/scripts/export-docs.js"
   },
   "repository": {
     "type": "git",

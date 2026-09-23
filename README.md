@@ -45,9 +45,11 @@ PostgreSQL, accessed through Prisma ORM using the `@prisma/adapter-pg` driver ad
 
 ## API Documentation
 
-Interactive Swagger/OpenAPI documentation is available at:
-- **Swagger UI:** `/api/docs`
-- **OpenAPI 3.0 JSON Spec:** `/api/docs.json`
+Interactive Swagger/OpenAPI documentation and contracts are available at:
+- **Swagger UI (Live):** `http://localhost:3000/api/docs`
+- **OpenAPI 3.0 JSON Spec (Live):** `http://localhost:3000/api/docs.json`
+- **Static Contract Files (for Frontend / Postman / Codegen):** [`docs/openapi.json`](docs/openapi.json) and [`docs/api-contract.json`](docs/api-contract.json)
+- **Export Command:** `npm run export:docs`
 
 The written endpoint-by-endpoint specification — request/response shapes, validation rules, and the authorization matrix — is in [`docs/API.md`](docs/API.md).
 

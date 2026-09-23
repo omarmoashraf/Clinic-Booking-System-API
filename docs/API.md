@@ -60,13 +60,13 @@ Consistent shape across the API:
 }
 ```
 
-Validation errors include a `details` array:
+Validation errors use status `validation_error` and include an `errors` array:
 
 ```json
 {
-  "status": "error",
-  "message": "Validation failed",
-  "details": [
+  "status": "validation_error",
+  "message": "Request validation failed",
+  "errors": [
     { "field": "email", "message": "must be a valid email" },
     { "field": "password", "message": "must be at least 8 characters" }
   ]

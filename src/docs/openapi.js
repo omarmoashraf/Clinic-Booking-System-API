@@ -9,7 +9,11 @@ export const openApiSpec = {
   servers: [
     {
       url: '/api/v1',
-      description: 'API v1 Base Endpoint',
+      description: 'API v1 Base Endpoint (relative)',
+    },
+    {
+      url: 'http://localhost:3000/api/v1',
+      description: 'Local Development Server',
     },
   ],
   components: {
@@ -33,7 +37,7 @@ export const openApiSpec = {
         type: 'object',
         properties: {
           status: { type: 'string', example: 'validation_error' },
-          message: { type: 'string', example: 'Validation failed' },
+          message: { type: 'string', example: 'Request validation failed' },
           errors: {
             type: 'array',
             items: {
@@ -41,9 +45,16 @@ export const openApiSpec = {
               properties: {
                 field: { type: 'string', example: 'email' },
                 message: { type: 'string', example: 'must be a valid email' },
+                code: { type: 'string', example: 'invalid_string' },
               },
             },
           },
+        },
+      },
+      RateLimitErrorResponse: {
+        type: 'object',
+        properties: {
+          message: { type: 'string', example: 'Too many requests. Please try again later.' },
         },
       },
       User: {
@@ -57,6 +68,42 @@ export const openApiSpec = {
           isActive: { type: 'boolean' },
           createdAt: { type: 'string', format: 'date-time' },
           updatedAt: { type: 'string', format: 'date-time' },
+        },
+      },
+      UserProfile: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          email: { type: 'string', format: 'email' },
+          fullName: { type: 'string' },
+          phone: { type: 'string', nullable: true },
+          role: { type: 'string', enum: ['PATIENT', 'DOCTOR', 'ADMIN'] },
+          isActive: { type: 'boolean' },
+          createdAt: { type: 'string', format: 'date-time' },
+          updatedAt: { type: 'string', format: 'date-time' },
+          patient: {
+            type: 'object',
+            nullable: true,
+            properties: {
+              id: { type: 'string', format: 'uuid' },
+              dateOfBirth: { type: 'string', example: '1995-06-15', nullable: true },
+            },
+          },
+          doctor: {
+            type: 'object',
+            nullable: true,
+            properties: {
+              id: { type: 'string', format: 'uuid' },
+              bio: { type: 'string', nullable: true },
+              specialty: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string', format: 'uuid' },
+                  name: { type: 'string' },
+                },
+              },
+            },
+          },
         },
       },
       DoctorProfile: {
@@ -134,6 +181,135 @@ export const openApiSpec = {
           totalPages: { type: 'integer', example: 5 },
         },
       },
+      AuthResponse: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', example: 'success' },
+          data: {
+            type: 'object',
+            properties: {
+              accessToken: { type: 'string', example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...' },
+              refreshToken: { type: 'string', example: '7d5e4b2a1c0f9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b3a2f' },
+              user: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string', format: 'uuid' },
+                  role: { type: 'string', enum: ['PATIENT', 'DOCTOR', 'ADMIN'] },
+                },
+              },
+            },
+          },
+        },
+      },
+      RegisterResponse: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', example: 'success' },
+          data: {
+            type: 'object',
+            properties: {
+              id: { type: 'string', format: 'uuid' },
+              role: { type: 'string', enum: ['PATIENT', 'DOCTOR'] },
+            },
+          },
+        },
+      },
+      UserProfileResponse: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', example: 'success' },
+          data: { $ref: '#/components/schemas/UserProfile' },
+        },
+      },
+      DoctorListResponse: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', example: 'success' },
+          data: {
+            type: 'array',
+            items: { $ref: '#/components/schemas/DoctorProfile' },
+          },
+          meta: { $ref: '#/components/schemas/PaginationMeta' },
+        },
+      },
+      DoctorDetailResponse: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', example: 'success' },
+          data: { $ref: '#/components/schemas/DoctorProfile' },
+        },
+      },
+      SpecialtyListResponse: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', example: 'success' },
+          data: {
+            type: 'array',
+            items: { $ref: '#/components/schemas/Specialty' },
+          },
+          meta: { $ref: '#/components/schemas/PaginationMeta' },
+        },
+      },
+      SpecialtyDetailResponse: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', example: 'success' },
+          data: { $ref: '#/components/schemas/Specialty' },
+        },
+      },
+      AvailabilityListResponse: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', example: 'success' },
+          data: {
+            type: 'array',
+            items: { $ref: '#/components/schemas/AvailabilitySlot' },
+          },
+        },
+      },
+      AvailabilityDetailResponse: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', example: 'success' },
+          data: { $ref: '#/components/schemas/AvailabilitySlot' },
+        },
+      },
+      AppointmentListResponse: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', example: 'success' },
+          data: {
+            type: 'array',
+            items: { $ref: '#/components/schemas/Appointment' },
+          },
+          meta: { $ref: '#/components/schemas/PaginationMeta' },
+        },
+      },
+      AppointmentDetailResponse: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', example: 'success' },
+          data: { $ref: '#/components/schemas/Appointment' },
+        },
+      },
+      AdminUserListResponse: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', example: 'success' },
+          data: {
+            type: 'array',
+            items: { $ref: '#/components/schemas/User' },
+          },
+          meta: { $ref: '#/components/schemas/PaginationMeta' },
+        },
+      },
+      AdminUserDetailResponse: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', example: 'success' },
+          data: { $ref: '#/components/schemas/User' },
+        },
+      },
     },
   },
   paths: {
@@ -148,7 +324,15 @@ export const openApiSpec = {
               'application/json': {
                 schema: {
                   type: 'object',
-                  properties: { status: { type: 'string', example: 'success' } },
+                  properties: {
+                    status: { type: 'string', example: 'success' },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        message: { type: 'string', example: 'ok' },
+                      },
+                    },
+                  },
                 },
               },
             },
@@ -180,9 +364,38 @@ export const openApiSpec = {
           },
         },
         responses: {
-          '201': { description: 'Registration successful' },
-          '400': { $ref: '#/components/schemas/ValidationErrorResponse' },
-          '409': { description: 'Email already registered' },
+          '201': {
+            description: 'Registration successful',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/RegisterResponse' },
+              },
+            },
+          },
+          '400': {
+            description: 'Validation failed',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ValidationErrorResponse' },
+              },
+            },
+          },
+          '409': {
+            description: 'Email already registered',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+          '429': {
+            description: 'Rate limit exceeded (5 requests per hour)',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/RateLimitErrorResponse' },
+              },
+            },
+          },
         },
       },
     },
@@ -206,14 +419,44 @@ export const openApiSpec = {
           },
         },
         responses: {
-          '200': { description: 'Login successful' },
-          '401': { description: 'Invalid email or password' },
+          '200': {
+            description: 'Login successful',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/AuthResponse' },
+              },
+            },
+          },
+          '400': {
+            description: 'Validation failed',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ValidationErrorResponse' },
+              },
+            },
+          },
+          '401': {
+            description: 'Invalid email or password (or locked/inactive)',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+          '429': {
+            description: 'Rate limit exceeded (10 requests per 15 minutes)',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/RateLimitErrorResponse' },
+              },
+            },
+          },
         },
       },
     },
     '/auth/refresh': {
       post: {
-        summary: 'Rotate refresh token for new access token',
+        summary: 'Rotate refresh token for new access + refresh tokens',
         tags: ['Auth'],
         requestBody: {
           required: true,
@@ -228,8 +471,38 @@ export const openApiSpec = {
           },
         },
         responses: {
-          '200': { description: 'Tokens rotated' },
-          '401': { description: 'Invalid or revoked token' },
+          '200': {
+            description: 'Tokens rotated successfully',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/AuthResponse' },
+              },
+            },
+          },
+          '400': {
+            description: 'Validation failed',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ValidationErrorResponse' },
+              },
+            },
+          },
+          '401': {
+            description: 'Invalid or revoked token (family revoked if reused)',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+          '429': {
+            description: 'Rate limit exceeded (20 requests per 15 minutes)',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/RateLimitErrorResponse' },
+              },
+            },
+          },
         },
       },
     },
@@ -252,7 +525,22 @@ export const openApiSpec = {
         },
         responses: {
           '204': { description: 'Logged out successfully' },
-          '401': { description: 'Unauthorized' },
+          '400': {
+            description: 'Validation failed',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ValidationErrorResponse' },
+              },
+            },
+          },
+          '401': {
+            description: 'Unauthorized',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
         },
       },
     },
@@ -262,8 +550,30 @@ export const openApiSpec = {
         tags: ['Users'],
         security: [{ BearerAuth: [] }],
         responses: {
-          '200': { description: 'User profile retrieved' },
-          '401': { description: 'Unauthorized' },
+          '200': {
+            description: 'User profile retrieved',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/UserProfileResponse' },
+              },
+            },
+          },
+          '401': {
+            description: 'Unauthorized or deactivated account',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+          '404': {
+            description: 'User profile not found',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
         },
       },
     },
@@ -277,7 +587,22 @@ export const openApiSpec = {
           { name: 'specialty', in: 'query', schema: { type: 'string' } },
         ],
         responses: {
-          '200': { description: 'Doctor list' },
+          '200': {
+            description: 'Doctor list',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/DoctorListResponse' },
+              },
+            },
+          },
+          '400': {
+            description: 'Invalid pagination query parameters',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ValidationErrorResponse' },
+              },
+            },
+          },
         },
       },
     },
@@ -287,8 +612,30 @@ export const openApiSpec = {
         tags: ['Doctors'],
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
         responses: {
-          '200': { description: 'Doctor detail' },
-          '404': { description: 'Doctor not found' },
+          '200': {
+            description: 'Doctor detail',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/DoctorDetailResponse' },
+              },
+            },
+          },
+          '400': {
+            description: 'Invalid doctor ID UUID',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ValidationErrorResponse' },
+              },
+            },
+          },
+          '404': {
+            description: 'Doctor not found',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
         },
       },
     },
@@ -311,8 +658,46 @@ export const openApiSpec = {
           },
         },
         responses: {
-          '200': { description: 'Doctor profile updated' },
-          '403': { description: 'Forbidden' },
+          '200': {
+            description: 'Doctor profile updated',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/DoctorDetailResponse' },
+              },
+            },
+          },
+          '400': {
+            description: 'Validation failed',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ValidationErrorResponse' },
+              },
+            },
+          },
+          '401': {
+            description: 'Unauthorized',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+          '403': {
+            description: 'Forbidden (DOCTOR role required)',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+          '404': {
+            description: 'Doctor profile or specialty not found',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
         },
       },
     },
@@ -336,8 +721,46 @@ export const openApiSpec = {
           },
         },
         responses: {
-          '200': { description: 'Patient profile updated' },
-          '403': { description: 'Forbidden' },
+          '200': {
+            description: 'Patient profile updated',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/UserProfileResponse' },
+              },
+            },
+          },
+          '400': {
+            description: 'Validation failed',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ValidationErrorResponse' },
+              },
+            },
+          },
+          '401': {
+            description: 'Unauthorized',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+          '403': {
+            description: 'Forbidden (PATIENT role required)',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+          '404': {
+            description: 'Patient profile not found',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
         },
       },
     },
@@ -351,7 +774,22 @@ export const openApiSpec = {
           { name: 'search', in: 'query', schema: { type: 'string' } },
         ],
         responses: {
-          '200': { description: 'Specialty list' },
+          '200': {
+            description: 'Specialty list',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/SpecialtyListResponse' },
+              },
+            },
+          },
+          '400': {
+            description: 'Invalid query parameters',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ValidationErrorResponse' },
+              },
+            },
+          },
         },
       },
       post: {
@@ -371,9 +809,46 @@ export const openApiSpec = {
           },
         },
         responses: {
-          '201': { description: 'Specialty created' },
-          '403': { description: 'Forbidden' },
-          '409': { description: 'Name conflict' },
+          '201': {
+            description: 'Specialty created',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/SpecialtyDetailResponse' },
+              },
+            },
+          },
+          '400': {
+            description: 'Validation failed',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ValidationErrorResponse' },
+              },
+            },
+          },
+          '401': {
+            description: 'Unauthorized',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+          '403': {
+            description: 'Forbidden (ADMIN role required)',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+          '409': {
+            description: 'Specialty name already exists',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
         },
       },
     },
@@ -383,8 +858,30 @@ export const openApiSpec = {
         tags: ['Specialties'],
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
         responses: {
-          '200': { description: 'Specialty detail' },
-          '404': { description: 'Not found' },
+          '200': {
+            description: 'Specialty detail',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/SpecialtyDetailResponse' },
+              },
+            },
+          },
+          '400': {
+            description: 'Invalid UUID',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ValidationErrorResponse' },
+              },
+            },
+          },
+          '404': {
+            description: 'Specialty not found',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
         },
       },
       patch: {
@@ -405,9 +902,54 @@ export const openApiSpec = {
           },
         },
         responses: {
-          '200': { description: 'Specialty updated' },
-          '403': { description: 'Forbidden' },
-          '409': { description: 'Name conflict' },
+          '200': {
+            description: 'Specialty updated',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/SpecialtyDetailResponse' },
+              },
+            },
+          },
+          '400': {
+            description: 'Validation failed',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ValidationErrorResponse' },
+              },
+            },
+          },
+          '401': {
+            description: 'Unauthorized',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+          '403': {
+            description: 'Forbidden (ADMIN role required)',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+          '404': {
+            description: 'Specialty not found',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+          '409': {
+            description: 'Name conflict',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
         },
       },
       delete: {
@@ -417,7 +959,46 @@ export const openApiSpec = {
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
         responses: {
           '204': { description: 'Deleted' },
-          '409': { description: 'Doctor still assigned' },
+          '400': {
+            description: 'Invalid UUID',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ValidationErrorResponse' },
+              },
+            },
+          },
+          '401': {
+            description: 'Unauthorized',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+          '403': {
+            description: 'Forbidden (ADMIN role required)',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+          '404': {
+            description: 'Specialty not found',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+          '409': {
+            description: 'Doctor still assigned to specialty',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
         },
       },
     },
@@ -431,7 +1012,30 @@ export const openApiSpec = {
           { name: 'to', in: 'query', schema: { type: 'string', example: '2026-09-30' } },
         ],
         responses: {
-          '200': { description: 'Available slots' },
+          '200': {
+            description: 'Available slots',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/AvailabilityListResponse' },
+              },
+            },
+          },
+          '400': {
+            description: 'Validation error in doctorId or dates',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ValidationErrorResponse' },
+              },
+            },
+          },
+          '404': {
+            description: 'Doctor not found',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
         },
       },
     },
@@ -457,8 +1061,54 @@ export const openApiSpec = {
           },
         },
         responses: {
-          '201': { description: 'Slot created' },
-          '409': { description: 'Slot overlap' },
+          '201': {
+            description: 'Slot created',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/AvailabilityDetailResponse' },
+              },
+            },
+          },
+          '400': {
+            description: 'Validation failed (e.g. endTime <= startTime)',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ValidationErrorResponse' },
+              },
+            },
+          },
+          '401': {
+            description: 'Unauthorized',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+          '403': {
+            description: 'Forbidden (DOCTOR role required)',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+          '404': {
+            description: 'Doctor profile not found',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+          '409': {
+            description: 'Slot overlaps with an existing slot',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
         },
       },
     },
@@ -470,7 +1120,46 @@ export const openApiSpec = {
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
         responses: {
           '204': { description: 'Slot deleted' },
-          '409': { description: 'Slot is already booked' },
+          '400': {
+            description: 'Invalid slot ID',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ValidationErrorResponse' },
+              },
+            },
+          },
+          '401': {
+            description: 'Unauthorized',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+          '403': {
+            description: 'Forbidden (DOCTOR role required or not owner)',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+          '404': {
+            description: 'Slot not found',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+          '409': {
+            description: 'Slot is already booked',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
         },
       },
     },
@@ -495,8 +1184,54 @@ export const openApiSpec = {
           },
         },
         responses: {
-          '201': { description: 'Appointment booked' },
-          '409': { description: 'Slot already booked' },
+          '201': {
+            description: 'Appointment booked',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/AppointmentDetailResponse' },
+              },
+            },
+          },
+          '400': {
+            description: 'Validation failed',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ValidationErrorResponse' },
+              },
+            },
+          },
+          '401': {
+            description: 'Unauthorized',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+          '403': {
+            description: 'Forbidden (PATIENT role required)',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+          '404': {
+            description: 'Availability slot not found',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+          '409': {
+            description: 'Slot already booked',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
         },
       },
     },
@@ -511,7 +1246,38 @@ export const openApiSpec = {
           { name: 'status', in: 'query', schema: { type: 'string', enum: ['PENDING', 'CONFIRMED', 'COMPLETED', 'CANCELLED'] } },
         ],
         responses: {
-          '200': { description: 'Appointments list' },
+          '200': {
+            description: 'Appointments list',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/AppointmentListResponse' },
+              },
+            },
+          },
+          '400': {
+            description: 'Invalid query parameters',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ValidationErrorResponse' },
+              },
+            },
+          },
+          '401': {
+            description: 'Unauthorized',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+          '403': {
+            description: 'Forbidden (PATIENT or DOCTOR role required)',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
         },
       },
     },
@@ -522,9 +1288,46 @@ export const openApiSpec = {
         security: [{ BearerAuth: [] }],
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
         responses: {
-          '200': { description: 'Appointment detail' },
-          '403': { description: 'Forbidden for non-owners' },
-          '404': { description: 'Not found' },
+          '200': {
+            description: 'Appointment detail',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/AppointmentDetailResponse' },
+              },
+            },
+          },
+          '400': {
+            description: 'Invalid UUID',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ValidationErrorResponse' },
+              },
+            },
+          },
+          '401': {
+            description: 'Unauthorized',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+          '403': {
+            description: 'Forbidden for non-owners (unless ADMIN)',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+          '404': {
+            description: 'Appointment not found',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
         },
       },
     },
@@ -549,8 +1352,54 @@ export const openApiSpec = {
           },
         },
         responses: {
-          '200': { description: 'Status updated' },
-          '409': { description: 'Invalid status transition or past appointment modification' },
+          '200': {
+            description: 'Status updated',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/AppointmentDetailResponse' },
+              },
+            },
+          },
+          '400': {
+            description: 'Validation failed',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ValidationErrorResponse' },
+              },
+            },
+          },
+          '401': {
+            description: 'Unauthorized',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+          '403': {
+            description: 'Forbidden (role/ownership violation)',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+          '404': {
+            description: 'Appointment not found',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+          '409': {
+            description: 'Invalid status transition or past appointment modification',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
         },
       },
     },
@@ -566,8 +1415,38 @@ export const openApiSpec = {
           { name: 'isActive', in: 'query', schema: { type: 'string', enum: ['true', 'false'] } },
         ],
         responses: {
-          '200': { description: 'Users list' },
-          '403': { description: 'Forbidden' },
+          '200': {
+            description: 'Users list',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/AdminUserListResponse' },
+              },
+            },
+          },
+          '400': {
+            description: 'Validation failed',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ValidationErrorResponse' },
+              },
+            },
+          },
+          '401': {
+            description: 'Unauthorized',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+          '403': {
+            description: 'Forbidden (ADMIN role required)',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
         },
       },
     },
@@ -592,8 +1471,46 @@ export const openApiSpec = {
           },
         },
         responses: {
-          '200': { description: 'User updated' },
-          '404': { description: 'User not found' },
+          '200': {
+            description: 'User updated',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/AdminUserDetailResponse' },
+              },
+            },
+          },
+          '400': {
+            description: 'Validation failed',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ValidationErrorResponse' },
+              },
+            },
+          },
+          '401': {
+            description: 'Unauthorized',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+          '403': {
+            description: 'Forbidden (ADMIN role required)',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+          '404': {
+            description: 'User not found',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
         },
       },
     },
@@ -610,8 +1527,38 @@ export const openApiSpec = {
           { name: 'patientId', in: 'query', schema: { type: 'string', format: 'uuid' } },
         ],
         responses: {
-          '200': { description: 'Appointments list' },
-          '403': { description: 'Forbidden' },
+          '200': {
+            description: 'Appointments list',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/AppointmentListResponse' },
+              },
+            },
+          },
+          '400': {
+            description: 'Validation failed',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ValidationErrorResponse' },
+              },
+            },
+          },
+          '401': {
+            description: 'Unauthorized',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
+          '403': {
+            description: 'Forbidden (ADMIN role required)',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorResponse' },
+              },
+            },
+          },
         },
       },
     },

@@ -24,6 +24,14 @@ const app = express();
 // Security & Base Middlewares
 app.use(helmet());
 app.use(cors({ origin: config.corsOrigin }));
+const allowedOrigins = config.corsOrigin === '*' 
+  ? '*' 
+  : config.corsOrigin.split(',').map(o => o.trim());
+
+app.use(cors({ 
+  origin: allowedOrigins,
+  credentials: true
+}));
 app.use(requestLogger); // Logging early
 app.use(express.json());
 app.use(cookieParser());
@@ -57,8 +65,12 @@ app.use(errorHandler);
 // (node src/app.js). When imported (e.g. by tests via supertest),
 // only the configured app is exported.
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const server = app.listen(config.port, () => {
-    console.log(`Server is running on port ${config.port}`);
+  const server = app.listen(config.port, '0.0.0.0', (err) => {
+    if (err) {
+      console.error(`Failed to start server: ${err.message}`);
+      process.exit(1);
+    }
+    console.log(`Server is running on port ${config.port} (0.0.0.0)`);
   });
 
   const gracefulShutdown = async (signal) => {
